@@ -29,3 +29,17 @@ h1,h2,h3,p{margin-top:0}
 .toast{position:fixed;bottom:20px;left:50%;transform:translate(-50%,20px);opacity:0;background:#eee;color:#111;padding:11px 16px;border-radius:8px;font-size:12px;transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
 @media(max-width:950px){.layout{grid-template-columns:210px minmax(0,1fr)}.right-column{display:none}}
 @media(max-width:650px){.topbar{height:62px;padding:0 17px}.topbar nav{gap:15px}.layout{width:calc(100% - 28px);margin:22px auto;display:block}.side-column{display:none}.sign-in{font-size:10px;padding:9px 10px}.section-heading h2{font-size:22px}.post{padding:15px}}
+
+.post-actions{display:flex;gap:9px;margin-top:15px;padding-top:13px;border-top:1px solid var(--line)}
+.post-action{border:1px solid var(--line);background:#171717;color:#bbb;border-radius:7px;padding:7px 11px;font:500 11px "DM Sans",sans-serif;cursor:pointer}
+.post-action:hover{border-color:#666;color:#fff}
+.post-media{display:block;width:100%;max-height:480px;object-fit:contain;background:#080808;border-radius:9px;margin-top:14px}
+.modal[hidden]{display:none}
+.modal{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:20px}
+.modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(5px)}
+.modal-card{position:relative;width:min(100%,410px);padding:30px;background:#141414;border:1px solid #333;border-radius:15px;box-shadow:0 24px 80px #000}
+.modal-close{position:absolute;right:15px;top:12px;border:0;background:transparent;color:#999;font-size:25px;cursor:pointer}
+.modal-card h2{font:600 23px "Space Grotesk",sans-serif;margin:13px 0 10px}
+.modal-card>p:not(.modal-footnote){font-size:12px;line-height:1.7;color:#aaa}
+.modal-sign-in{display:block;text-align:center;background:#f4f4f4;color:#111;border-radius:8px;padding:12px;font-size:12px;font-weight:700;margin-top:20px}
+.modal-card .modal-footnote{font-size:10px;text-align:center;color:#777;margin:13px 0 0}
