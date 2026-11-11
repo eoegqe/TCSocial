@@ -47,7 +47,7 @@ async function loadProfile(username){
   const data=await api("/api/profile/"+encodeURIComponent(username));
   const p=data.profile;
   const name=p.display_name||"@"+p.username;
-  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span></div></div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
+  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span></div><button class="post-action" data-auth-action="follow">Follow</button></div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
   const posts=await api("/api/profile/"+encodeURIComponent(username)+"/posts");
   const target=document.querySelector("#profile-posts");
   target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This creator has not posted yet.</section>';
