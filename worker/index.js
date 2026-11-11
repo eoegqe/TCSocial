@@ -57,7 +57,9 @@ export default {
           try{imageUrl=new URL(picture)}catch{return json({error:"invalid_profile_picture_url",message:"Profile picture must be a valid HTTPS image URL."},400)}
           if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url",message:"Profile picture must use HTTPS."},400);
         }
-        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,profile_picture=? WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,picture,username).run();
+        const result=picture===undefined
+          ?await env.TC.prepare("UPDATE users SET display_name=?,bio=? WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,username).run()
+          :await env.TC.prepare("UPDATE users SET display_name=?,bio=?,profile_picture=? WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,picture,username).run();
         if(!result.meta?.changes)return notFound();
         const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture FROM users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
         return json({profile:safeUser(updated)});
@@ -85,7 +87,7 @@ export default {
     if(url.pathname==="/api/feed"&&request.method==="GET"){
       try{
         const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL AND u.status='active' ORDER BY p.created_at DESC LIMIT 30").all();
-        return json({posts:result.results||[]});
+        return json({posts:publicPosts(result.results)});
       }catch(error){console.error("TC Social feed query failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
     if(url.pathname.startsWith("/api/"))return notFound();
