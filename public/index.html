@@ -29,6 +29,17 @@
       <footer>© <span id="year"></span> Theegget Creations</footer>
     </aside>
   </main>
+  <div id="auth-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close-auth></div>
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <button class="modal-close" type="button" data-close-auth aria-label="Close">×</button>
+      <span class="eyebrow">TC ACCOUNT</span>
+      <h2 id="auth-title">Sign in to continue</h2>
+      <p>You can browse TC Social without an account. Sign in with your TC account to react, comment, follow creators, or publish posts.</p>
+      <a class="modal-sign-in" href="https://accounts.theegget.com/">Sign in with TC</a>
+      <p class="modal-footnote">You can keep browsing without signing in.</p>
+    </section>
+  </div>
   <div id="toast" class="toast" role="status"></div>
 </body>
 </html>
