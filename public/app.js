@@ -87,6 +87,42 @@ async function loadHome(){
   feed.innerHTML=posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>';
  }catch(error){renderRequestError(error)}
 }
+
+function closeProfileEditor(){const modal=document.querySelector("#profile-editor-modal");if(modal)modal.remove()}
+function openProfileEditor(profile){
+ closeProfileEditor();
+ const modal=document.createElement("div");
+ modal.id="profile-editor-modal";
+ modal.className="modal";
+ modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">CREATOR SETTINGS</span><h2 id="profile-editor-title">Edit Creator page</h2><form id="profile-editor-form"><label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" placeholder="Your display name"><label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea><label for="edit-profile-picture">Profile picture URL</label><input id="edit-profile-picture" name="profile_picture" type="url" maxlength="2048" placeholder="https://example.com/image.png"><p class="editor-hint">Leave a field empty to clear it. Profile pictures must use HTTPS.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
+ document.body.append(modal);
+ modal.querySelector('[name="display_name"]').value=profile.display_name||"";
+ modal.querySelector('[name="bio"]').value=profile.bio||"";
+ modal.querySelector('[name="profile_picture"]').value=profile.profile_picture||"";
+ modal.querySelector('[name="display_name"]').focus();
+}
+async function saveProfileEditor(form){
+ const token=sessionStorage.getItem("tc_social_access_token");
+ const errorBox=document.querySelector("#profile-editor-error");
+ const submit=form.querySelector('[type="submit"]');
+ submit.disabled=true;submit.textContent="Saving…";errorBox.textContent="";
+ try{
+  const values=Object.fromEntries(new FormData(form).entries());
+  const response=await fetch("/api/profile/me",{method:"PATCH",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+token},credentials:"same-origin",body:JSON.stringify(values)});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok){const messages={unauthorized:"Your TC sign-in has expired. Please sign in again.",display_name_too_long:"Display name must be 80 characters or fewer.",bio_too_long:"Bio must be 500 characters or fewer.",invalid_profile_picture_url:"Profile picture must be a valid HTTPS URL."};throw new Error(messages[data.error]||data.message||"Your Creator page could not be saved. Please try again.");}
+  closeProfileEditor();
+  showToast("Creator page updated.");
+  loadProfile(data.profile.username);
+  const user=JSON.parse(sessionStorage.getItem("tc_social_user")||"null");
+  if(user&&String(user.preferred_username||"").toLowerCase()===String(data.profile.username).toLowerCase()){
+   user.picture=data.profile.profile_picture||"";
+   sessionStorage.setItem("tc_social_user",JSON.stringify(user));
+   updateSignInState(user);
+  }
+ }catch(error){errorBox.textContent=error.message;submit.disabled=false;submit.textContent="Save changes"}
+}
+
 async function loadProfile(username){
  pageTitle.textContent="Creator";
  try{
@@ -101,20 +137,22 @@ async function loadProfile(username){
   target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This creator has not posted yet.</section>';
  }catch(error){renderRequestError(error)}
 }
-document.addEventListener("click",event=>{
+document.addEventListener("click",async event=>{
  const accountToggle=event.target.closest("[data-tc-header-account][aria-expanded]");
  if(accountToggle){event.preventDefault();const dropdown=document.querySelector("[data-account-dropdown]");const opening=dropdown.hidden;dropdown.hidden=!opening;accountToggle.setAttribute("aria-expanded",String(opening));return}
  const logout=event.target.closest("[data-account-logout]");
  if(logout){sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user");sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");location.assign("/");return}
  const editProfile=event.target.closest("[data-edit-profile]");
- if(editProfile){showToast("Profile editing is not available yet.");return}
+ if(editProfile){const username=decodeURIComponent(location.pathname.split("/")[1].replace(/^@/,""));const profile=await api("/api/profile/"+encodeURIComponent(username));openProfileEditor(profile.profile);return}
  if(!event.target.closest(".account-menu-wrap")){const dropdown=document.querySelector("[data-account-dropdown]");const toggle=document.querySelector("[data-tc-header-account][aria-expanded]");if(dropdown)dropdown.hidden=true;if(toggle)toggle.setAttribute("aria-expanded","false")}
  const signIn=event.target.closest("[data-tc-signin]");
  if(signIn){event.preventDefault();beginSignIn();return}
  const action=event.target.closest("[data-auth-action]");
  if(action){document.querySelector("#auth-modal").hidden=false;return}
  if(event.target.closest("[data-close-auth]"))document.querySelector("#auth-modal").hidden=true;
+ if(event.target.closest("[data-editor-close]"))closeProfileEditor();
 });
-document.addEventListener("keydown",event=>{if(event.key==="Escape")document.querySelector("#auth-modal").hidden=true});
+document.addEventListener("submit",event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();saveProfileEditor(event.target)}});
+document.addEventListener("keydown",event=>{if(event.key==="Escape"){document.querySelector("#auth-modal").hidden=true;closeProfileEditor()}});
 if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
 else{restoreSignIn();let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match)loadProfile(match[1]);else loadHome()}
