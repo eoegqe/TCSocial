@@ -89,16 +89,30 @@ async function loadHome(){
 }
 
 function closeProfileEditor(){const modal=document.querySelector("#profile-editor-modal");if(modal)modal.remove()}
+async function resizeProfilePhoto(file){
+ if(!["image/png","image/jpeg","image/webp"].includes(file.type))throw new Error("Choose a PNG, JPEG, or WebP photo.");
+ if(file.size>12*1024*1024)throw new Error("Choose an image smaller than 12 MB.");
+ const bitmap=await createImageBitmap(file);
+ const scale=Math.min(1,512/Math.max(bitmap.width,bitmap.height));
+ const canvas=document.createElement("canvas");
+ canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+ const context=canvas.getContext("2d");context.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+ let blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",.82));
+ if(!blob)blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.82));
+ if(blob.size>400000)blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.65));
+ if(!blob||blob.size>400000)throw new Error("This photo is too large after resizing. Choose another image.");
+ return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Could not read the selected photo."));reader.readAsDataURL(blob)});
+}
 function openProfileEditor(profile){
  closeProfileEditor();
  const modal=document.createElement("div");
  modal.id="profile-editor-modal";
  modal.className="modal";
- modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">CREATOR SETTINGS</span><h2 id="profile-editor-title">Edit Creator page</h2><form id="profile-editor-form"><label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" placeholder="Your display name"><label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea><label for="edit-profile-picture">Profile picture URL</label><input id="edit-profile-picture" name="profile_picture" type="url" maxlength="2048" placeholder="https://example.com/image.png"><p class="editor-hint">Leave a field empty to clear it. Profile pictures must use HTTPS.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
+ modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">CREATOR SETTINGS</span><h2 id="profile-editor-title">Edit Creator page</h2><form id="profile-editor-form"><label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" placeholder="Your display name"><label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea><label for="edit-profile-picture">Profile photo</label><input id="edit-profile-picture" name="profile_picture_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="profile-photo-preview" id="profile-photo-preview"></div><button type="button" class="post-action" id="remove-profile-picture">Remove photo</button><p class="editor-hint">Choose a PNG, JPEG, or WebP image. It will be resized before upload.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
  document.body.append(modal);
  modal.querySelector('[name="display_name"]').value=profile.display_name||"";
  modal.querySelector('[name="bio"]').value=profile.bio||"";
- modal.querySelector('[name="profile_picture"]').value=profile.profile_picture||"";
+ modal.querySelector("#profile-photo-preview").innerHTML=profile.profile_picture?avatar(profile.profile_picture,profile.display_name||profile.username):"<span class=\"avatar\">"+escapeHtml(initials(profile.username))+"</span>";
  modal.querySelector('[name="display_name"]').focus();
 }
 async function saveProfileEditor(form){
@@ -107,10 +121,13 @@ async function saveProfileEditor(form){
  const submit=form.querySelector('[type="submit"]');
  submit.disabled=true;submit.textContent="Saving…";errorBox.textContent="";
  try{
-  const values=Object.fromEntries(new FormData(form).entries());
+  const values={display_name:form.elements.display_name.value,bio:form.elements.bio.value};
+  const file=form.elements.profile_picture_file.files[0];
+  if(file)values.profile_picture=await resizeProfilePhoto(file);
+  if(form.dataset.removePhoto==="true")values.profile_picture="";
   const response=await fetch("/api/profile/me",{method:"PATCH",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+token},credentials:"same-origin",body:JSON.stringify(values)});
   const data=await response.json().catch(()=>({}));
-  if(!response.ok){const messages={unauthorized:"Your TC sign-in has expired. Please sign in again.",display_name_too_long:"Display name must be 80 characters or fewer.",bio_too_long:"Bio must be 500 characters or fewer.",invalid_profile_picture_url:"Profile picture must be a valid HTTPS URL."};throw new Error(messages[data.error]||data.message||"Your Creator page could not be saved. Please try again.");}
+  if(!response.ok){const messages={image_too_large:"The resized photo must be 400 KB or smaller.",invalid_image:"Choose a PNG, JPEG, or WebP photo.",unauthorized:"Your TC sign-in has expired. Please sign in again.",display_name_too_long:"Display name must be 80 characters or fewer.",bio_too_long:"Bio must be 500 characters or fewer.",invalid_profile_picture_url:"Profile picture must be a valid HTTPS URL."};throw new Error(messages[data.error]||data.message||"Your Creator page could not be saved. Please try again.");}
   closeProfileEditor();
   showToast("Creator page updated.");
   loadProfile(data.profile.username);
@@ -151,6 +168,7 @@ document.addEventListener("click",async event=>{
  if(action){document.querySelector("#auth-modal").hidden=false;return}
  if(event.target.closest("[data-close-auth]"))document.querySelector("#auth-modal").hidden=true;
  if(event.target.closest("[data-editor-close]"))closeProfileEditor();
+ if(event.target.closest("#remove-profile-picture")){const form=document.querySelector("#profile-editor-form");form.dataset.removePhoto="true";form.elements.profile_picture_file.value="";document.querySelector("#profile-photo-preview").innerHTML='<span class="avatar">TC</span>';}
 });
 document.addEventListener("submit",event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();saveProfileEditor(event.target)}});
 document.addEventListener("keydown",event=>{if(event.key==="Escape"){document.querySelector("#auth-modal").hidden=true;closeProfileEditor()}});
