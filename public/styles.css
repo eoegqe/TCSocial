@@ -45,3 +45,7 @@ h1,h2,h3,p{margin-top:0}
 .modal-card .modal-footnote{font-size:10px;text-align:center;color:#777;margin:13px 0 0}
 
 .error-code.bot-error-code{font-size:30px;line-height:1.2;letter-spacing:-1px;overflow-wrap:anywhere}
+
+.account-avatar-link{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;overflow:hidden;border:1px solid #444;background:#1b1b1b;flex:none}
+.account-avatar{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover}
+.account-avatar-fallback{display:grid;place-items:center;color:#eee;font-size:13px;font-weight:700}
