@@ -69,3 +69,7 @@ h1,h2,h3,p{margin-top:0}
 .editor-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:8px}
 .editor-save{border:1px solid #eee;background:#eee;color:#111;border-radius:7px;padding:9px 13px;font:700 11px 'DM Sans',sans-serif;cursor:pointer}
 .editor-save:disabled{opacity:.55;cursor:wait}
+
+.profile-editor-card input[type=file]{padding:9px;background:#111;font-size:11px}
+.profile-photo-preview{display:flex;align-items:center;gap:10px;min-height:52px}
+.profile-photo-preview .avatar{width:52px;height:52px}
