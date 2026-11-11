@@ -5,6 +5,12 @@ export default {
   async fetch(request,env){
     const url=new URL(request.url);
     if(url.pathname==="/api/health"&&request.method==="GET")return json({ok:true,service:"TC Social"});
+    if(url.pathname==="/app.js"&&request.method==="GET"){
+      const asset=await env.ASSETS.fetch(request);
+      const source=await asset.text();
+      const repaired=source.replaceAll("\\n","\n").replaceAll("\\\\","\\");
+      return new Response(repaired,{status:asset.status,headers:asset.headers});
+    }
     if(url.pathname==="/api/auth/config"&&request.method==="GET")return json({client_id:env.TC_SOCIAL_CLIENT_ID||null,redirect_uri:new URL("/auth/callback",url.origin).toString()});
     if(url.pathname==="/api/profile"||url.pathname==="/api/profile/")return json({error:"username_required"},400);
     if(url.pathname.startsWith("/api/profile/")&&request.method==="GET"){
