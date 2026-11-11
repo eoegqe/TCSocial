@@ -43,3 +43,5 @@ h1,h2,h3,p{margin-top:0}
 .modal-card>p:not(.modal-footnote){font-size:12px;line-height:1.7;color:#aaa}
 .modal-sign-in{display:block;text-align:center;background:#f4f4f4;color:#111;border-radius:8px;padding:12px;font-size:12px;font-weight:700;margin-top:20px}
 .modal-card .modal-footnote{font-size:10px;text-align:center;color:#777;margin:13px 0 0}
+
+.error-code.bot-error-code{font-size:30px;line-height:1.2;letter-spacing:-1px;overflow-wrap:anywhere}
