@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090909">
+  <meta name="description" content="TC Social — your corner of Theegget Creations.">
+  <title>TC Social</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="TC Social home"><span class="brand-mark">TC</span><span>Social</span></a>
+    <nav><a href="/" class="nav-link active">Home</a><a href="/explore" class="nav-link">Explore</a></nav>
+    <a class="sign-in" href="https://accounts.theegget.com/">Sign in with TC</a>
+  </header>
+  <main id="app" class="layout">
+    <aside class="side-column">
+      <section class="panel intro-panel"><span class="eyebrow">THEEGGET CREATIONS</span><h1>Your people.<br>Your corner.</h1><p>Connect with creators across TC.</p></section>
+      <section class="panel side-panel"><span class="eyebrow">TC SOCIAL</span><a href="/explore">Explore creators <span>↗</span></a><a href="https://theegget.com">Theegget Creations <span>↗</span></a></section>
+    </aside>
+    <section class="main-column">
+      <div class="section-heading"><div><span class="eyebrow">YOUR COMMUNITY</span><h2 id="page-title">Home</h2></div><span class="live-dot">LIVE</span></div>
+      <div id="feed" class="feed"><div class="loading"><span class="spinner"></span><p>Loading TC Social…</p></div></div>
+    </section>
+    <aside class="right-column">
+      <section class="panel about-panel"><span class="eyebrow">ABOUT</span><h3>Made for TC.</h3><p>TC Social is the social platform for Theegget Creations.</p><a href="https://theegget.com">Learn about TC ↗</a></section>
+      <footer>© <span id="year"></span> Theegget Creations</footer>
+    </aside>
+  </main>
+  <div id="toast" class="toast" role="status"></div>
+</body>
+</html>
