@@ -101,4 +101,4 @@ document.addEventListener("click",event=>{
 });
 document.addEventListener("keydown",event=>{if(event.key==="Escape")document.querySelector("#auth-modal").hidden=true});
 if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
-else{restoreSignIn();const match=location.pathname.match(/^\/@([^/]+)\/?$/);if(match)loadProfile(decodeURIComponent(match[1]));else loadHome()}
+else{restoreSignIn();let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match)loadProfile(match[1]);else loadHome()}
