@@ -9,7 +9,7 @@ const time=value=>{const date=new Date(value);return Number.isNaN(date.getTime()
 async function api(path){const token=sessionStorage.getItem("tc_social_access_token");const response=await fetch(path,{headers:{accept:"application/json",...(token?{authorization:"Bearer "+token}:{})},credentials:"same-origin"});const data=await response.json().catch(()=>({}));if(!response.ok){const error=new Error("Request failed");error.status=response.status;error.code=data.error;error.confidence=data.confidence;throw error}return data}
 
 const OAUTH_REDIRECT_URI=location.origin+"/auth/callback";
-const bytesToBase64Url=bytes=>{let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/g,"")};
+const bytesToBase64Url=bytes=>{let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"")};
 async function sha256(value){return bytesToBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value))))}
 function randomToken(){const bytes=new Uint8Array(32);crypto.getRandomValues(bytes);return bytesToBase64Url(bytes)}
 async function beginSignIn(){try{const config=await api("/api/auth/config");if(!config.client_id)throw new Error("TC Social's OAuth client ID has not been configured yet.");const state=randomToken(),verifier=randomToken(),challenge=await sha256(verifier);sessionStorage.setItem("tc_social_oauth_state",state);sessionStorage.setItem("tc_social_oauth_verifier",verifier);const authorize=new URL("https://accounts.theegget.com/oauth/authorize");for(const [key,value] of Object.entries({client_id:config.client_id,redirect_uri:OAUTH_REDIRECT_URI,response_type:"code",scope:"profile",state,code_challenge:challenge,code_challenge_method:"S256"}))authorize.searchParams.set(key,value);location.assign(authorize.toString())}catch(error){showAuthError(error.message)}}
@@ -79,4 +79,4 @@ document.addEventListener("click",event=>{
 });
 document.addEventListener("keydown",event=>{if(event.key==="Escape")document.querySelector("#auth-modal").hidden=true});
 if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
-else{restoreSignIn();const match=location.pathname.match(/^\\/@([^/]+)\\/?$/);if(match)loadProfile(decodeURIComponent(match[1]));else loadHome()}
+else{restoreSignIn();const match=location.pathname.match(/^\/@([^/]+)\/?$/);if(match)loadProfile(decodeURIComponent(match[1]));else loadHome()}
