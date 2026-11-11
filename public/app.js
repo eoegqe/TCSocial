@@ -32,9 +32,6 @@ async function updateSignInState(user){
  header.href="/@"+encodeURIComponent(username);
  header.className="account-avatar-link";
  header.removeAttribute("data-tc-signin");
- header.removeAttribute("data-tc-signin");
- header.removeAttribute("data-tc-signin");
- header.removeAttribute("data-tc-signin");
  header.title="@"+username;
  header.setAttribute("aria-label","Open your profile, @"+username);
  header.innerHTML=safe?'<img class="account-avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="account-avatar account-avatar-fallback">'+escapeHtml(initials(username))+'</span>';
