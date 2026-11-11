@@ -12,6 +12,38 @@ export default {
       return new Response(repaired,{status:asset.status,headers:asset.headers});
     }
     if(url.pathname==="/api/auth/config"&&request.method==="GET")return json({client_id:env.TC_SOCIAL_CLIENT_ID||null,redirect_uri:new URL("/auth/callback",url.origin).toString()});
+    if(url.pathname==="/api/profile/me"&&request.method==="PATCH"){
+      const authorization=request.headers.get("authorization")||"";
+      const match=authorization.match(/^Bearer\s+(.+)$/i);
+      if(!match)return json({error:"unauthorized"},401);
+      try{
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({error:"unauthorized"},401);
+        const identity=await identityResponse.json();
+        const username=String(identity.preferred_username||"").trim();
+        if(!identity.sub||!username)return json({error:"unauthorized"},401);
+        const body=await request.json().catch(()=>null);
+        if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
+        const displayName=body.display_name==null||String(body.display_name).trim()===""?null:String(body.display_name).trim();
+        const bio=body.bio==null||String(body.bio).trim()===""?null:String(body.bio).trim();
+        const picture=body.profile_picture==null||String(body.profile_picture).trim()===""?null:String(body.profile_picture).trim();
+        if(displayName&&displayName.length>80)return json({error:"display_name_too_long",message:"Display name must be 80 characters or fewer."},400);
+        if(bio&&bio.length>500)return json({error:"bio_too_long",message:"Bio must be 500 characters or fewer."},400);
+        if(picture){
+          if(picture.length>2048)return json({error:"profile_picture_url_too_long"},400);
+          let imageUrl;
+          try{imageUrl=new URL(picture)}catch{return json({error:"invalid_profile_picture_url",message:"Profile picture must be a valid HTTPS image URL."},400)}
+          if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url",message:"Profile picture must use HTTPS."},400);
+        }
+        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,profile_picture=? WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,picture,username).run();
+        if(!result.meta?.changes)return notFound();
+        const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture FROM users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
+        return json({profile:safeUser(updated)});
+      }catch(error){
+        console.error("TC Social profile update failed",String(error?.message||error));
+        return json({error:"internal_error"},500);
+      }
+    }
     if(url.pathname==="/api/profile"||url.pathname==="/api/profile/")return json({error:"username_required"},400);
     if(url.pathname.startsWith("/api/profile/")&&request.method==="GET"){
       const parts=url.pathname.split("/").filter(Boolean);
