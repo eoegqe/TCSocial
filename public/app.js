@@ -6,13 +6,19 @@ const initials=value=>String(value||"TC").trim().slice(0,1).toUpperCase();
 const safeMediaUrl=value=>{try{const url=new URL(value,location.origin);return ["https:","http:"].includes(url.protocol)?url.href:""}catch{return ""}};
 const avatar=(url,name)=>{const safe=safeMediaUrl(url);return safe?'<img class="avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="avatar">'+escapeHtml(initials(name))+'</span>'};
 const time=value=>{const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})};
-async function api(path){const response=await fetch(path,{headers:{accept:"application/json"},credentials:"same-origin"});if(!response.ok){const error=new Error("Request failed");error.status=response.status;throw error}return response.json()}
+async function api(path){const response=await fetch(path,{headers:{accept:"application/json"},credentials:"same-origin"});const data=await response.json().catch(()=>({}));if(!response.ok){const error=new Error("Request failed");error.status=response.status;error.code=data.error;error.confidence=data.confidence;throw error}return data}
 function renderPost(post){
  const name=post.display_name||"@"+post.username;
  const mediaUrl=safeMediaUrl(post.media_url);
  const media=mediaUrl?(/\.(mp4|webm|ogg)(?:$|\?)/i.test(mediaUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(mediaUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(mediaUrl)+'" alt="Post media">'):"";
  return '<article class="post"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+'<div class="post-actions"><button class="post-action" data-auth-action="react">React</button><button class="post-action" data-auth-action="comment">Comment</button></div></article>';
 }
+function renderBotBlockedError(){
+ const messages=["sorry clanker You can\u0027t access this action yeah I\u0027ll just call you that until you verify","clanker... You in fact do not have access","look at the sign. We are anti-bot\u0027s"];
+ const message=messages[Math.floor(Math.random()*messages.length)];
+ feed.innerHTML='<section class="error-shell"><div class="error-card"><p class="error-code bot-error-code">Action blocked</p><h2 class="error-title">Action blocked</h2><p class="error-message">'+escapeHtml(message)+'</p><a class="error-home" href="/">Back to TC Social</a></div></section>';
+}
+function renderRequestError(error){if(error?.code==="bot_detected"&&error?.confidence==="high"){renderBotBlockedError();return}renderError(error?.status||500)}
 function renderError(status){
  const current=location.pathname;
  const previous=()=>{const ref=document.referrer;if(ref&&new URL(ref).origin===location.origin)return ref;return "/"};
@@ -39,7 +45,7 @@ async function loadHome(){
   const data=await api("/api/feed");
   const posts=data.posts||[];
   feed.innerHTML=posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>';
- }catch(error){renderError(error.status||500)}
+ }catch(error){renderRequestError(error)}
 }
 async function loadProfile(username){
  pageTitle.textContent="Creator";
@@ -51,7 +57,7 @@ async function loadProfile(username){
   const posts=await api("/api/profile/"+encodeURIComponent(username)+"/posts");
   const target=document.querySelector("#profile-posts");
   target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This creator has not posted yet.</section>';
- }catch(error){renderError(error.status||500)}
+ }catch(error){renderRequestError(error)}
 }
 document.addEventListener("click",event=>{
  const action=event.target.closest("[data-auth-action]");
