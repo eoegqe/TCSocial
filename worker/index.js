@@ -40,7 +40,7 @@ export default {
         if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
         const displayName=body.display_name==null||String(body.display_name).trim()===""?null:String(body.display_name).trim();
         const bio=body.bio==null||String(body.bio).trim()===""?null:String(body.bio).trim();
-        let picture=body.profile_picture==null||String(body.profile_picture).trim()===""?null:String(body.profile_picture).trim();
+        let picture=Object.prototype.hasOwnProperty.call(body,"profile_picture")?(body.profile_picture==null||String(body.profile_picture).trim()===""?null:String(body.profile_picture).trim()):undefined;
         if(picture&&picture.startsWith("data:")){
           const uploaded=picture.match(/^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
           if(!uploaded)return json({error:"invalid_image"},400);
