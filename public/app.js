@@ -143,7 +143,7 @@ document.addEventListener("click",async event=>{
  const logout=event.target.closest("[data-account-logout]");
  if(logout){sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user");sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");location.assign("/");return}
  const editProfile=event.target.closest("[data-edit-profile]");
- if(editProfile){const username=decodeURIComponent(location.pathname.split("/")[1].replace(/^@/,""));const profile=await api("/api/profile/"+encodeURIComponent(username));openProfileEditor(profile.profile);return}
+ if(editProfile){try{const username=decodeURIComponent(location.pathname.split("/")[1].replace(/^@/,""));const profile=await api("/api/profile/"+encodeURIComponent(username));openProfileEditor(profile.profile)}catch(error){showToast("Could not load your Creator page settings.")}return}
  if(!event.target.closest(".account-menu-wrap")){const dropdown=document.querySelector("[data-account-dropdown]");const toggle=document.querySelector("[data-tc-header-account][aria-expanded]");if(dropdown)dropdown.hidden=true;if(toggle)toggle.setAttribute("aria-expanded","false")}
  const signIn=event.target.closest("[data-tc-signin]");
  if(signIn){event.preventDefault();beginSignIn();return}
@@ -155,4 +155,4 @@ document.addEventListener("click",async event=>{
 document.addEventListener("submit",event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();saveProfileEditor(event.target)}});
 document.addEventListener("keydown",event=>{if(event.key==="Escape"){document.querySelector("#auth-modal").hidden=true;closeProfileEditor()}});
 if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
-else{restoreSignIn();let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match)loadProfile(match[1]);else loadHome()}
+else{let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match){restoreSignIn().then(()=>loadProfile(match[1]))}else{restoreSignIn();loadHome()}}
