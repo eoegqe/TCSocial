@@ -3,15 +3,61 @@ const pageTitle=document.querySelector("#page-title");
 document.querySelector("#year").textContent=new Date().getFullYear();
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 const initials=value=>String(value||"TC").trim().slice(0,1).toUpperCase();
-const avatar=(url,name)=>url?'<img class="avatar" src="'+escapeHtml(url)+'" alt="">':'<span class="avatar">'+escapeHtml(initials(name))+'</span>';
+const safeMediaUrl=value=>{try{const url=new URL(value,location.origin);return ["https:","http:"].includes(url.protocol)?url.href:""}catch{return ""}};
+const avatar=(url,name)=>{const safe=safeMediaUrl(url);return safe?'<img class="avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="avatar">'+escapeHtml(initials(name))+'</span>'};
 const time=value=>{const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})};
 async function api(path){const response=await fetch(path,{headers:{accept:"application/json"},credentials:"same-origin"});if(!response.ok){const error=new Error("Request failed");error.status=response.status;throw error}return response.json()}
-function renderPost(post){const name=post.display_name||"@"+post.username;return '<article class="post"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div><p class="post-content">'+escapeHtml(post.content)+'</p></article>'}
-function renderError(status){const current=location.pathname;const previous=()=>{const ref=document.referrer;if(ref&&new URL(ref).origin===location.origin)return ref;return "/"};let title="Something went wrong",message="We couldn't complete that request.",code=status;
-if(status===403||status===404){const key="tc_error_"+status+"_"+current;const attempt=Number(sessionStorage.getItem(key)||0)+1;sessionStorage.setItem(key,String(attempt));const messages=status===403?["Looks like you don't have access to that page.","I already told you you don't have access.","Buddy. Are you blind? You don't have access.","Seriously? This page isn't for you.","Okay, I think you've made your point. You STILL don't have access."]:["Uh oh! We couldn't find that page.","Yeah... still can't find it.","Are you sure you typed that correctly?","I'm starting to think this page doesn't exist.","Buddy, THERE IS NO PAGE HERE."];title=status===403?"403 · Forbidden":"404 · Not Found";if(attempt>5){message="Alright, let's get you out of here.";setTimeout(()=>location.replace(previous()),1800)}else message=messages[Math.min(attempt-1,4)]}
-else if(status===500){const key="tc_error_500";const attempt=Number(sessionStorage.getItem(key)||0)+1;sessionStorage.setItem(key,String(attempt));title="500 · Internal Server Error";message=attempt===1?"Well, that wasn't supposed to happen. Something went wrong on our end.":"Looks like Theegget might need to fix the servers again."}
-feed.innerHTML='<section class="error-shell"><div class="error-card"><p class="error-code">'+escapeHtml(code)+'</p><h2 class="error-title">'+escapeHtml(title)+'</h2><p class="error-message">'+escapeHtml(message)+'</p><a class="error-home" href="/">Back to TC Social</a></div></section>'}
-async function loadHome(){pageTitle.textContent=location.pathname==="/explore"?"Explore":"Home";try{const data=await api("/api/feed");const posts=data.posts||[];feed.innerHTML=posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>'}catch(error){renderError(error.status||500)}}
-async function loadProfile(username){pageTitle.textContent="Creator";try{const data=await api("/api/profile/"+encodeURIComponent(username));const p=data.profile;const name=p.display_name||"@"+p.username;feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span></div></div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';const posts=await api("/api/profile/"+encodeURIComponent(username)+"/posts");const target=document.querySelector("#profile-posts");target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This creator has not posted yet.</section>'}catch(error){renderError(error.status||500)}}
+function renderPost(post){
+ const name=post.display_name||"@"+post.username;
+ const mediaUrl=safeMediaUrl(post.media_url);
+ const media=mediaUrl?(/\.(mp4|webm|ogg)(?:$|\?)/i.test(mediaUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(mediaUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(mediaUrl)+'" alt="Post media">'):"";
+ return '<article class="post"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+'<div class="post-actions"><button class="post-action" data-auth-action="react">React</button><button class="post-action" data-auth-action="comment">Comment</button></div></article>';
+}
+function renderError(status){
+ const current=location.pathname;
+ const previous=()=>{const ref=document.referrer;if(ref&&new URL(ref).origin===location.origin)return ref;return "/"};
+ let title="Something went wrong",message="We couldn't complete that request.",code=status;
+ if(status===403||status===404){
+  const key="tc_error_"+status+"_"+current;
+  const attempt=Number(sessionStorage.getItem(key)||0)+1;
+  sessionStorage.setItem(key,String(attempt));
+  const messages=status===403?["Looks like you don't have access to that page.","I already told you you don't have access.","Buddy. Are you blind? You don't have access.","Seriously? This page isn't for you.","Okay, I think you've made your point. You STILL don't have access."]:["Uh oh! We couldn't find that page.","Yeah... still can't find it.","Are you sure you typed that correctly?","I'm starting to think this page doesn't exist.","Buddy, THERE IS NO PAGE HERE."];
+  title=status===403?"403 · Forbidden":"404 · Not Found";
+  if(attempt>5){message="Alright, let's get you out of here.";setTimeout(()=>location.replace(previous()),1800)}else message=messages[Math.min(attempt-1,4)];
+ }else if(status===500){
+  const key="tc_error_500";
+  const attempt=Number(sessionStorage.getItem(key)||0)+1;
+  sessionStorage.setItem(key,String(attempt));
+  title="500 · Internal Server Error";
+  message=attempt===1?"Well, that wasn't supposed to happen. Something went wrong on our end.":"Looks like Theegget might need to fix the servers again.";
+ }
+ feed.innerHTML='<section class="error-shell"><div class="error-card"><p class="error-code">'+escapeHtml(code)+'</p><h2 class="error-title">'+escapeHtml(title)+'</h2><p class="error-message">'+escapeHtml(message)+'</p><a class="error-home" href="/">Back to TC Social</a></div></section>';
+}
+async function loadHome(){
+ pageTitle.textContent=location.pathname==="/explore"?"Explore":"Home";
+ try{
+  const data=await api("/api/feed");
+  const posts=data.posts||[];
+  feed.innerHTML=posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>';
+ }catch(error){renderError(error.status||500)}
+}
+async function loadProfile(username){
+ pageTitle.textContent="Creator";
+ try{
+  const data=await api("/api/profile/"+encodeURIComponent(username));
+  const p=data.profile;
+  const name=p.display_name||"@"+p.username;
+  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span></div></div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
+  const posts=await api("/api/profile/"+encodeURIComponent(username)+"/posts");
+  const target=document.querySelector("#profile-posts");
+  target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This creator has not posted yet.</section>';
+ }catch(error){renderError(error.status||500)}
+}
+document.addEventListener("click",event=>{
+ const action=event.target.closest("[data-auth-action]");
+ if(action){document.querySelector("#auth-modal").hidden=false;return}
+ if(event.target.closest("[data-close-auth]"))document.querySelector("#auth-modal").hidden=true;
+});
+document.addEventListener("keydown",event=>{if(event.key==="Escape")document.querySelector("#auth-modal").hidden=true});
 const match=location.pathname.match(/^\/@([^/]+)\/?$/);
 if(match)loadProfile(decodeURIComponent(match[1]));else loadHome();
