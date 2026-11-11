@@ -13,7 +13,32 @@ const bytesToBase64Url=bytes=>{let binary="";for(const byte of bytes)binary+=Str
 async function sha256(value){return bytesToBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value))))}
 function randomToken(){const bytes=new Uint8Array(32);crypto.getRandomValues(bytes);return bytesToBase64Url(bytes)}
 async function beginSignIn(){try{const config=await api("/api/auth/config");if(!config.client_id)throw new Error("TC Social's OAuth client ID has not been configured yet.");const state=randomToken(),verifier=randomToken(),challenge=await sha256(verifier);sessionStorage.setItem("tc_social_oauth_state",state);sessionStorage.setItem("tc_social_oauth_verifier",verifier);const authorize=new URL("https://accounts.theegget.com/oauth/authorize");for(const [key,value] of Object.entries({client_id:config.client_id,redirect_uri:OAUTH_REDIRECT_URI,response_type:"code",scope:"profile",state,code_challenge:challenge,code_challenge_method:"S256"}))authorize.searchParams.set(key,value);location.assign(authorize.toString())}catch(error){showAuthError(error.message)}}
-function updateSignInState(user){document.querySelectorAll("[data-tc-signin]").forEach(link=>{link.textContent=user?"Signed in as @"+user.preferred_username:"Sign in with TC";link.setAttribute("aria-label",user?"Signed in as @"+user.preferred_username:"Sign in with TC")})}
+async function updateSignInState(user){
+ const header=document.querySelector("[data-tc-header-account]");
+ if(!header)return;
+ if(!user||!user.preferred_username){
+  header.href="#";
+  header.className="sign-in";
+  header.textContent="Sign in with TC";
+  header.setAttribute("data-tc-signin","");
+  header.removeAttribute("title");
+  header.setAttribute("aria-label","Sign in with TC");
+  return;
+ }
+ const username=String(user.preferred_username);
+ let picture=user.picture||user.profile_picture||"";
+ try{const profile=await api("/api/profile/"+encodeURIComponent(username));picture=profile.profile?.profile_picture||picture}catch{}
+ const safe=safeMediaUrl(picture);
+ header.href="/@"+encodeURIComponent(username);
+ header.className="account-avatar-link";
+ header.removeAttribute("data-tc-signin");
+ header.removeAttribute("data-tc-signin");
+ header.removeAttribute("data-tc-signin");
+ header.removeAttribute("data-tc-signin");
+ header.title="@"+username;
+ header.setAttribute("aria-label","Open your profile, @"+username);
+ header.innerHTML=safe?'<img class="account-avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="account-avatar account-avatar-fallback">'+escapeHtml(initials(username))+'</span>';
+}
 async function restoreSignIn(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});if(!response.ok)throw new Error("expired");const user=await response.json();sessionStorage.setItem("tc_social_user",JSON.stringify(user));updateSignInState(user)}catch{sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user");updateSignInState(null)}}
 function showAuthError(message){const modal=document.querySelector("#auth-modal");modal.hidden=false;const description=modal.querySelector("p");if(description)description.textContent=message}
 async function completeSignIn(){const params=new URLSearchParams(location.search),code=params.get("code"),state=params.get("state"),expected=sessionStorage.getItem("tc_social_oauth_state"),verifier=sessionStorage.getItem("tc_social_oauth_verifier");if(params.has("error"))throw new Error(params.get("error")==="access_denied"?"You cancelled TC Social sign-in.":"TC Accounts could not authorize this sign-in.");if(!code||!state||!expected||state!==expected||!verifier)throw new Error("The sign-in response could not be verified. Please try again.");const config=await api("/api/auth/config");if(!config.client_id)throw new Error("TC Social's OAuth client ID has not been configured yet.");const response=await fetch("https://accounts.theegget.com/oauth/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","accept":"application/json"},body:new URLSearchParams({grant_type:"authorization_code",code,client_id:config.client_id,redirect_uri:OAUTH_REDIRECT_URI,code_verifier:verifier})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.access_token)throw new Error(data.error_description||data.error||"TC Accounts could not complete sign-in.");sessionStorage.setItem("tc_social_access_token",data.access_token);const userResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+data.access_token,accept:"application/json"}});const user=await userResponse.json().catch(()=>({}));if(!userResponse.ok||!user.sub)throw new Error("TC Accounts issued a token but could not confirm the account identity.");sessionStorage.setItem("tc_social_user",JSON.stringify(user));updateSignInState(user);sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");history.replaceState({},"","/");location.assign("/")}
