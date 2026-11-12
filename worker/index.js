@@ -165,7 +165,7 @@ export default {
         if(!user)return notFound();
         if(parts.length===3)return json({profile:safeUser(user)});
         if(parts.length===4&&parts[3]==="posts"){
-          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
+          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
           return json({posts:publicPosts(result.results)});
         }
         return notFound();
@@ -173,7 +173,7 @@ export default {
     }
     if(url.pathname==="/api/feed"&&request.method==="GET"){
       try{
-        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL AND u.status='active' ORDER BY p.created_at DESC LIMIT 30").all();
+        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL AND u.status='active' ORDER BY p.created_at DESC LIMIT 30").all();
         return json({posts:publicPosts(result.results)});
       }catch(error){console.error("TC Social feed query failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
