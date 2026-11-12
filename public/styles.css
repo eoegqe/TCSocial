@@ -73,3 +73,17 @@ h1,h2,h3,p{margin-top:0}
 .profile-editor-card input[type=file]{padding:9px;background:#111;font-size:11px}
 .profile-photo-preview{display:flex;align-items:center;gap:10px;min-height:52px}
 .profile-photo-preview .avatar{width:52px;height:52px}
+
+.composer-card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:17px;margin-bottom:12px;display:grid;gap:10px}
+.composer-card label{font-size:12px;font-weight:700;color:#ddd}
+.composer-card textarea{width:100%;resize:vertical;min-height:76px;border:1px solid #333;border-radius:8px;background:#0b0b0b;color:#fff;padding:12px;font:13px/1.6 'DM Sans',sans-serif}
+.composer-bottom{display:flex;align-items:center;justify-content:space-between}
+.composer-bottom span{font-size:10px;color:var(--muted)}
+.comments-area{border-top:1px solid var(--line);margin-top:13px;padding-top:12px}
+.comment{padding:9px 0;border-bottom:1px solid #222}
+.comment strong{font-size:11px}
+.comment p{font-size:12px;color:#ddd;white-space:pre-wrap;overflow-wrap:anywhere;margin:5px 0}
+.comment small{font-size:9px;color:var(--muted)}
+.comment-form{display:flex;gap:8px;margin-top:12px}
+.comment-form input{min-width:0;flex:1;background:#0b0b0b;border:1px solid #333;border-radius:7px;color:#fff;padding:9px;font:12px 'DM Sans',sans-serif}
+.post-action.is-active{background:#eee;color:#111;border-color:#eee}
