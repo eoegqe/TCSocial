@@ -26,6 +26,93 @@ export default {
         return new Response(bytes,{headers:{"content-type":match[1],"cache-control":"public, max-age=3600","x-content-type-options":"nosniff"}});
       }catch(error){console.error("TC Social avatar query failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
+
+    const getSocialUser=async()=>{
+      const authorization=request.headers.get("authorization")||"";
+      const token=authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+      if(!token)return null;
+      const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});
+      if(!response.ok)return null;
+      const identity=await response.json();
+      const username=String(identity.preferred_username||"").trim();
+      if(!identity.sub||!username)return null;
+      return await env.TC.prepare("SELECT id,username FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+    };
+    if(url.pathname==="/api/posts"&&request.method==="POST"){
+      try{
+        const user=await getSocialUser();
+        if(!user)return json({error:"unauthorized"},401);
+        const body=await request.json().catch(()=>null);
+        if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
+        const content=String(body.content||"").trim();
+        const mediaUrl=body.media_url==null||String(body.media_url).trim()===""?null:String(body.media_url).trim();
+        if(!content&&!mediaUrl)return json({error:"empty_post"},400);
+        if(content.length>5000)return json({error:"post_too_long"},400);
+        if(mediaUrl){
+          if(mediaUrl.length>2048)return json({error:"media_url_too_long"},400);
+          let parsed;
+          try{parsed=new URL(mediaUrl)}catch{return json({error:"invalid_media_url"},400)}
+          if(parsed.protocol!=="https:")return json({error:"invalid_media_url"},400);
+        }
+        const result=await env.TC.prepare("INSERT INTO social_posts (user_id,content,media_url) VALUES (?,?,?)").bind(user.id,content,mediaUrl).run();
+        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.id=?").bind(result.meta.last_row_id).first();
+        return json({post:publicPosts([post])[0]},201);
+      }catch(error){console.error("TC Social post creation failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
+    if(/^\/api\/posts\/\d+\/reaction$/.test(url.pathname)&&request.method==="POST"){
+      try{
+        const user=await getSocialUser();
+        if(!user)return json({error:"unauthorized"},401);
+        const postId=Number(url.pathname.split("/")[3]);
+        const post=await env.TC.prepare("SELECT id FROM social_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first();
+        if(!post)return notFound();
+        const existing=await env.TC.prepare("SELECT 1 FROM social_reactions WHERE post_id=? AND user_id=?").bind(postId,user.id).first();
+        if(existing)await env.TC.prepare("DELETE FROM social_reactions WHERE post_id=? AND user_id=?").bind(postId,user.id).run();
+        else await env.TC.prepare("INSERT INTO social_reactions (post_id,user_id,reaction) VALUES (?,?,'like')").bind(postId,user.id).run();
+        const count=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_reactions WHERE post_id=?").bind(postId).first();
+        return json({reacted:!existing,count:Number(count?.count||0)});
+      }catch(error){console.error("TC Social reaction failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
+    if(/^\/api\/posts\/\d+\/comments$/.test(url.pathname)){
+      const postId=Number(url.pathname.split("/")[3]);
+      if(request.method==="GET"){
+        try{
+          const result=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? AND c.deleted_at IS NULL AND u.status='active' ORDER BY c.created_at ASC LIMIT 100").bind(postId).all();
+          return json({comments:publicPosts(result.results)});
+        }catch(error){console.error("TC Social comments query failed",String(error?.message||error));return json({error:"internal_error"},500)}
+      }
+      if(request.method==="POST"){
+        try{
+          const user=await getSocialUser();
+          if(!user)return json({error:"unauthorized"},401);
+          const post=await env.TC.prepare("SELECT id FROM social_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first();
+          if(!post)return notFound();
+          const body=await request.json().catch(()=>null);
+          const content=String(body?.content||"").trim();
+          if(!content)return json({error:"empty_comment"},400);
+          if(content.length>1000)return json({error:"comment_too_long"},400);
+          const result=await env.TC.prepare("INSERT INTO social_comments (post_id,user_id,content) VALUES (?,?,?)").bind(postId,user.id,content).run();
+          const comment=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.id=?").bind(result.meta.last_row_id).first();
+          return json({comment:publicPosts([comment])[0]},201);
+        }catch(error){console.error("TC Social comment creation failed",String(error?.message||error));return json({error:"internal_error"},500)}
+      }
+    }
+    if(url.pathname.startsWith("/api/follow/")&&(request.method==="POST"||request.method==="DELETE")){
+      try{
+        const user=await getSocialUser();
+        if(!user)return json({error:"unauthorized"},401);
+        const username=decodeURIComponent(url.pathname.slice("/api/follow/".length)).replace(/^@/,"");
+        const target=await env.TC.prepare("SELECT id FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        if(!target)return notFound();
+        if(Number(target.id)===Number(user.id))return json({error:"cannot_follow_self"},400);
+        if(request.method==="POST"){
+          await env.TC.prepare("INSERT OR IGNORE INTO social_follows (follower_id,followed_id) VALUES (?,?)").bind(user.id,target.id).run();
+          return json({following:true});
+        }
+        await env.TC.prepare("DELETE FROM social_follows WHERE follower_id=? AND followed_id=?").bind(user.id,target.id).run();
+        return json({following:false});
+      }catch(error){console.error("TC Social follow failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
     if(url.pathname==="/api/profile/me"&&request.method==="PATCH"){
       const authorization=request.headers.get("authorization")||"";
       const match=authorization.match(/^Bearer\s+(.+)$/i);
