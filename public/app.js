@@ -51,7 +51,7 @@ async function completeSignIn(){const params=new URLSearchParams(location.search
 function renderPost(post){
  const name=post.display_name||"@"+post.username;
  const mediaUrl=safeMediaUrl(post.media_url);
- const media=mediaUrl?(/\\.(mp4|webm|ogg)(?:$|\\?)/i.test(mediaUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(mediaUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(mediaUrl)+'" alt="Post media">'):"";
+ const media=mediaUrl?(/\.(mp4|webm|ogg)(?:$|\?)/i.test(mediaUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(mediaUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(mediaUrl)+'" alt="Post media">'):"";
  return '<article class="post" data-post-id="'+Number(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+'<div class="post-actions"><button class="post-action" data-post-action="react" data-post-id="'+Number(post.id)+'">React · '+Number(post.reaction_count||0)+'</button><button class="post-action" data-post-action="comment" data-post-id="'+Number(post.id)+'">Comments</button></div><div class="comments-area" data-comments-for="'+Number(post.id)+'" hidden></div></article>';
 }
 function renderBotBlockedError(){
