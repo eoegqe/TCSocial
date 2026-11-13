@@ -117,7 +117,7 @@ async function loadRecommendations(){
  try{
   const data=await api("/api/recommendations");
   const items=data.recommendations||[];
-  aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div>'+(items.length?'<div class="recommendation-list">'+items.map(item=>'<a class="recommendation-item" href="/@'+encodeURIComponent(item.username)+'">'+avatar(item.profile_picture,item.display_name||item.username)+'<span class="recommendation-info"><strong>'+escapeHtml(item.display_name||item.username)+'</strong><small>@'+escapeHtml(item.username)+' · '+Number(item.follower_count||0).toLocaleString()+' followers</small></span></a>').join("")+'</div>':'<p class="recommendation-empty">No creators to recommend yet.</p>');
+  aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div>'+(items.length?'<div class="recommendation-list">'+items.map(item=>'<a class="recommendation-item" href="/@'+encodeURIComponent(item.username)+'">'+avatar(item.profile_picture,item.display_name||item.username)+'<span class="recommendation-info"><strong>'+escapeHtml(item.display_name||item.username)+verifiedMark(item.verified)+'</strong><small>@'+escapeHtml(item.username)+' · '+Number(item.follower_count||0).toLocaleString()+' followers</small></span></a>').join("")+'</div>':'<p class="recommendation-empty">No creators to recommend yet.</p>');
  }catch{aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div><p class="recommendation-empty">Recommendations are temporarily unavailable.</p>'}
 }
 async function loadHome(){
