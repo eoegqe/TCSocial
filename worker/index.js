@@ -9,8 +9,8 @@ export default {
   async fetch(request,env){
     const url=new URL(request.url);
     if(url.pathname==="/api/health"&&request.method==="GET")return json({ok:true,service:"TC Social"});
-    if((url.pathname==="/"||url.pathname==="/index.html"||url.pathname==="/u2")&&request.method==="GET"){
-      const asset=await env.ASSETS.fetch(url.pathname==="/u2"?new Request(new URL("/",request.url),request):request);
+    if((url.pathname==="/"||url.pathname==="/index.html"||url.pathname==="/u2"||url.pathname==="/u1"||url.pathname==="/u0")&&request.method==="GET"){
+      const asset=await env.ASSETS.fetch(url.pathname==="/"||url.pathname==="/index.html"?request:new Request(new URL("/",request.url),request));
       let html=await asset.text();
       const removeAside=(input,marker)=>{const start=input.indexOf(marker);if(start<0)return input;const end=input.indexOf("</aside>",start);return end<0?input:input.slice(0,start)+input.slice(end+8)};
       html=removeAside(html,'<aside class="side-column">');
@@ -60,7 +60,7 @@ export default {
       repaired=repaired.replace('fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+data.access_token,accept:"application/json"}});','fetch("https://accounts.theegget.com/oauth/userinfo"+slotSuffix,{headers:{authorization:"Bearer "+data.access_token,accept:"application/json"}});');
       repaired=repaired.replace('sessionStorage.setItem("tc_social_access_token",data.access_token);const userResponse=','sessionStorage.setItem("tc_social_access_token",data.access_token);sessionStorage.setItem("tc_social_account_slot",String(authSlot));const userResponse=');
       repaired=repaired.replace('sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");history.replaceState','sessionStorage.removeItem("tc_social_oauth_slot");sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");history.replaceState');
-      repaired=repaired.replace('if(location.pathname==="/auth/callback"){completeSignIn().catch','if(location.pathname==="/u2"){beginSignIn(2)}else if(location.pathname==="/auth/callback"){completeSignIn().catch');
+      repaired=repaired.replace('if(location.pathname==="/auth/callback"){completeSignIn().catch','if(location.pathname==="/u2"){beginSignIn(2)}else if(location.pathname==="/u1"||location.pathname==="/u0"){beginSignIn(0)}else if(location.pathname==="/auth/callback"){completeSignIn().catch');
       return new Response(repaired,{status:asset.status,headers:asset.headers});
     }
     if(url.pathname==="/api/auth/config"&&request.method==="GET")return json({client_id:env.TC_SOCIAL_CLIENT_ID||null,redirect_uri:new URL("/auth/callback",url.origin).toString()});
