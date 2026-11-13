@@ -9,6 +9,19 @@ export default {
   async fetch(request,env){
     const url=new URL(request.url);
     if(url.pathname==="/api/health"&&request.method==="GET")return json({ok:true,service:"TC Social"});
+    if(url.pathname==="/api/presence/heartbeat"&&request.method==="POST"){
+      const authorization=request.headers.get("authorization")||"",match=authorization.match(/^Bearer\\s+(.+)$/i);
+      if(!match)return json({error:"unauthorized"},401);
+      try{
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({error:"unauthorized"},401);
+        const identity=await identityResponse.json();
+        const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
+        if(!user)return json({error:"social_account_required"},403);
+        await env.TC.prepare("UPDATE users SET last_heartbeat_at=? WHERE id=?").bind(new Date().toISOString(),user.id).run();
+        return json({ok:true});
+      }catch(error){console.error("TC Social heartbeat failed",String(error?.message||error));return json({error:"presence_unavailable"},503)}
+    }
     if((url.pathname==="/"||url.pathname==="/index.html"||url.pathname==="/u2"||url.pathname==="/u1"||url.pathname==="/u0")&&request.method==="GET"){
       const asset=await env.ASSETS.fetch(url.pathname==="/"||url.pathname==="/index.html"?request:new Request(new URL("/",request.url),request));
       let html=await asset.text();
@@ -48,6 +61,7 @@ export default {
         repaired=repaired.replace('if(event.target.id!=="post-composer")return;\\n event.preventDefault();', 'if(event.target.id!=="post-composer")return;\\n event.preventDefault();\\n if(!await requireSignIn())return;');
         repaired=repaired.replace('document.addEventListener("submit",event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();saveProfileEditor(event.target)}});', 'document.addEventListener("submit",async event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();if(await requireSignIn())saveProfileEditor(event.target)}});');
       }
+      repaired=repaired.replace('if(location.pathname==="/u2"){beginSignIn(2)}','async function sendPresenceHeartbeat(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{await fetch("/api/presence/heartbeat",{method:"POST",headers:{authorization:"Bearer "+token,accept:"application/json"},credentials:"same-origin"})}catch{}}sendPresenceHeartbeat();setInterval(sendPresenceHeartbeat,30000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)sendPresenceHeartbeat()});if(location.pathname==="/u2"){beginSignIn(2)}');
       repaired=repaired.replaceAll('["youtube","instagram","tiktok","spotify","twitch","website"]','["youtube","instagram","tiktok","spotify","twitch","x","website"]');
       repaired=repaired.replace('<label for="edit-website">Website</label>','<label for="edit-x">X</label><input id="edit-x" name="social_x" type="url" maxlength="500" placeholder="https://x.com/username"><label for="edit-x-label">X button label</label><input id="edit-x-label" name="social_x_label" maxlength="40" placeholder="e.g. Follow me on X"><label for="edit-website">Website</label>');
       repaired=repaired.replace('twitch:"Twitch",website:"Website"','twitch:"Twitch",x:"X",website:"Website"');
@@ -353,7 +367,7 @@ export default {
       const username=decodeURIComponent(parts[2]||"").replace(/^@/,"");
       if(!username||username.length>64)return json({error:"invalid_username"},400);
       try{
-        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,social_links,verified,verification_type,is_tc_staff,is_private FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,social_links,verified,verification_type,is_tc_staff,is_private,last_heartbeat_at FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
         if(!user){
           const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image,verified,verification_type,is_tc_staff FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
@@ -372,7 +386,7 @@ export default {
                 }
               }catch{}
             }
-            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0)}});
+            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0),is_online:Boolean(user.last_heartbeat_at&&Date.now()-Date.parse(user.last_heartbeat_at)<90000)}});
           }
           if(parts.length===4&&parts[3]==="posts"){
             const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture,sp.verified,sp.verification_type,sp.is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
