@@ -95,28 +95,80 @@ export default {
       const targetName=decodeURIComponent(url.pathname.slice("/api/follow/".length)).replace(/^@/,"");
       if(!targetName||targetName.length>64)return json({error:"invalid_username"},400);
       try{
-        const target=await env.TC.prepare("SELECT id FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(targetName).first();
-        if(!target)return notFound();
+        const targetUser=await env.TC.prepare("SELECT id FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(targetName).first();
+        const targetPage=targetUser?null:await env.TC.prepare("SELECT id FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(targetName).first();
+        if(!targetUser&&!targetPage)return notFound();
         const authorization=request.headers.get("authorization")||"";
         const match=authorization.match(/^Bearer\s+(.+)$/i);
-        if(!match){
-          if(request.method==="GET")return json({following:false});
-          return json({error:"unauthorized"},401);
-        }
+        if(!match){if(request.method==="GET")return json({following:false});return json({error:"unauthorized"},401)}
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
         if(!identityResponse.ok)return json({error:"unauthorized"},401);
         const identity=await identityResponse.json();
         const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
         if(!user)return json({error:"social_account_required"},403);
-        if(user.id===target.id)return json({error:"cannot_follow_self"},400);
-        if(request.method==="POST"){
-          await env.TC.prepare("INSERT OR IGNORE INTO social_follows (follower_id,followed_id) VALUES (?,?)").bind(user.id,target.id).run();
-        }else if(request.method==="DELETE"){
-          await env.TC.prepare("DELETE FROM social_follows WHERE follower_id=? AND followed_id=?").bind(user.id,target.id).run();
+        if(targetUser){
+          if(user.id===targetUser.id)return json({error:"cannot_follow_self"},400);
+          if(request.method==="POST")await env.TC.prepare("INSERT OR IGNORE INTO social_follows (follower_id,followed_id) VALUES (?,?)").bind(user.id,targetUser.id).run();
+          else if(request.method==="DELETE")await env.TC.prepare("DELETE FROM social_follows WHERE follower_id=? AND followed_id=?").bind(user.id,targetUser.id).run();
+          const relation=await env.TC.prepare("SELECT 1 AS following FROM social_follows WHERE follower_id=? AND followed_id=?").bind(user.id,targetUser.id).first();
+          return json({following:Boolean(relation),target_type:"user"});
         }
-        const relation=await env.TC.prepare("SELECT 1 AS following FROM social_follows WHERE follower_id=? AND followed_id=?").bind(user.id,target.id).first();
-        return json({following:Boolean(relation)});
+        if(request.method==="POST")await env.TC.prepare("INSERT OR IGNORE INTO social_page_follows (follower_id,page_id) VALUES (?,?)").bind(user.id,targetPage.id).run();
+        else if(request.method==="DELETE")await env.TC.prepare("DELETE FROM social_page_follows WHERE follower_id=? AND page_id=?").bind(user.id,targetPage.id).run();
+        const relation=await env.TC.prepare("SELECT 1 AS following FROM social_page_follows WHERE follower_id=? AND page_id=?").bind(user.id,targetPage.id).first();
+        return json({following:Boolean(relation),target_type:"page"});
       }catch(error){console.error("TC Social follow request failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
+    const engagementMatch=url.pathname.match(/^\/api\/posts\/(\d+)\/(comments|reactions)$/);
+    if(engagementMatch){
+      const postId=Number(engagementMatch[1]),kind=engagementMatch[2];
+      if(!Number.isSafeInteger(postId)||postId<1)return json({error:"invalid_post"},400);
+      try{
+        const post=await env.TC.prepare("SELECT id FROM social_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first();
+        if(!post)return notFound();
+        if(kind==="comments"&&request.method==="GET"){
+          const result=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? AND c.deleted_at IS NULL AND u.status='active' ORDER BY c.created_at ASC LIMIT 100").bind(postId).all();
+          return json({comments:publicPosts(result.results)});
+        }
+        if(kind==="reactions"&&request.method==="GET"){
+          const count=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_reactions WHERE post_id=?").bind(postId).first();
+          let reacted=false;
+          const auth=request.headers.get("authorization")||"",tokenMatch=auth.match(/^Bearer\s+(.+)$/i);
+          if(tokenMatch){
+            const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});
+            if(identityResponse.ok){
+              const identity=await identityResponse.json();
+              const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active'").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
+              if(user)reacted=Boolean(await env.TC.prepare("SELECT 1 FROM social_reactions WHERE post_id=? AND user_id=?").bind(postId,user.id).first());
+            }
+          }
+          return json({count:Number(count?.count||0),reacted});
+        }
+        const auth=request.headers.get("authorization")||"",tokenMatch=auth.match(/^Bearer\s+(.+)$/i);
+        if(!tokenMatch)return json({error:"unauthorized"},401);
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({error:"unauthorized"},401);
+        const identity=await identityResponse.json();
+        const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active'").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
+        if(!user)return json({error:"social_account_required"},403);
+        if(kind==="reactions"&&(request.method==="POST"||request.method==="DELETE")){
+          if(request.method==="POST")await env.TC.prepare("INSERT OR IGNORE INTO social_reactions (post_id,user_id,reaction) VALUES (?,?,'like')").bind(postId,user.id).run();
+          else await env.TC.prepare("DELETE FROM social_reactions WHERE post_id=? AND user_id=?").bind(postId,user.id).run();
+          const count=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_reactions WHERE post_id=?").bind(postId).first();
+          return json({count:Number(count?.count||0),reacted:request.method==="POST"});
+        }
+        if(kind==="comments"&&request.method==="POST"){
+          const body=await request.json().catch(()=>null);
+          const content=String(body?.content||"").trim();
+          if(!content)return json({error:"empty_comment",message:"Write a comment first."},400);
+          if(content.length>1000)return json({error:"comment_too_long",message:"Comments must be 1,000 characters or fewer."},400);
+          const createdAt=new Date().toISOString();
+          const result=await env.TC.prepare("INSERT INTO social_comments (post_id,user_id,content,created_at,updated_at) VALUES (?,?,?,?,?)").bind(postId,user.id,content,createdAt,createdAt).run();
+          const comment=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.id=?").bind(result.meta?.last_row_id).first();
+          return json({comment:comment?{...comment,profile_picture:publicPicture(comment.profile_picture,comment.username)}:null},201);
+        }
+        return json({error:"method_not_allowed"},405);
+      }catch(error){console.error("TC Social engagement request failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
     if(url.pathname.startsWith("/api/pages/")&&request.method==="PATCH"){
       const pageId=Number(url.pathname.slice("/api/pages/".length));
@@ -244,7 +296,7 @@ export default {
     }
     if(url.pathname==="/api/feed"&&request.method==="GET"){
       try{
-        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.deleted_at IS NULL AND u.status='active' ORDER BY p.created_at DESC LIMIT 30").all();
+        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.deleted_at IS NULL AND u.status='active' ORDER BY p.created_at DESC LIMIT 30").all();
         return json({posts:publicPosts(result.results)});
       }catch(error){console.error("TC Social feed query failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
