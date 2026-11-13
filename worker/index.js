@@ -269,8 +269,14 @@ export default {
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
         if(!identityResponse.ok)return json({error:"unauthorized"},401);
         const identity=await identityResponse.json();
-        const username=String(identity.preferred_username||"").trim();
-        if(!identity.sub||!username)return json({error:"unauthorized"},401);
+        const signedInUsername=String(identity.preferred_username||"").trim();
+        if(!identity.sub||!signedInUsername)return json({error:"unauthorized"},401);
+        const userId=Number(identity.sub);
+        const targetUsername=url.pathname==="/api/profile/me"?signedInUsername:decodeURIComponent(url.pathname.slice("/api/profile/".length)).replace(/^@/,"");
+        const target=await env.TC.prepare("SELECT id,username FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(targetUsername).first();
+        if(!target)return notFound();
+        if(userId!==1&&Number(target.id)!==userId)return json({error:"forbidden"},403);
+        const username=target.username;
         const body=await request.json().catch(()=>null);
         if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
         const displayName=body.display_name==null||String(body.display_name).trim()===""?null:String(body.display_name).trim();
