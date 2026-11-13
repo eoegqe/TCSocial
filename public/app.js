@@ -69,6 +69,21 @@ function renderPost(post){
  const media=mediaUrl?(/\.(mp4|webm|ogg)(?:$|\?)/i.test(mediaUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(mediaUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(mediaUrl)+'" alt="Post media">'):"";
  return '<article class="post" data-post-id="'+escapeHtml(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+'<div class="post-actions"><button class="post-action" data-react aria-pressed="false">Like <span data-reaction-count>'+Number(post.reaction_count||0)+'</span></button><button class="post-action" data-comments-toggle aria-expanded="false">Comments <span data-comment-count>'+Number(post.comment_count||0)+'</span></button></div><section class="comments-panel" data-comments-panel hidden><div class="comments-list" data-comments-list></div><form class="comment-form"><textarea name="content" maxlength="1000" rows="2" placeholder="Write a comment…" required></textarea><div><span>1,000 characters max</span><button class="post-action" type="submit">Comment</button></div><p class="comment-error" role="alert"></p></form></section></article>';
 }
+async function loadPostReactionStates(root){
+ const token=sessionStorage.getItem("tc_social_access_token");
+ const posts=[...root.querySelectorAll("[data-post-id]")];
+ await Promise.all(posts.map(async post=>{
+  try{
+   const response=await fetch("/api/posts/"+post.dataset.postId+"/reactions",{headers:{accept:"application/json",...(token?{authorization:"Bearer "+token}:{})}});
+   if(!response.ok)return;
+   const data=await response.json(),button=post.querySelector("[data-react]");
+   if(!button)return;
+   button.setAttribute("aria-pressed",String(data.reacted));
+   button.querySelector("[data-reaction-count]").textContent=data.count;
+   button.classList.toggle("is-active",data.reacted);
+  }catch{}
+ }));
+}
 function renderBotBlockedError(){
  const messages=["sorry clanker You can\u0027t access this action yeah I\u0027ll just call you that until you verify","clanker... You in fact do not have access","look at the sign. We are anti-bot\u0027s"];
  const message=messages[Math.floor(Math.random()*messages.length)];
@@ -109,6 +124,7 @@ async function loadHome(){
    composer='<button class="compose-toggle" id="compose-toggle" type="button" aria-expanded="false" aria-controls="post-composer">+ Post</button><form id="post-composer" class="post-composer" hidden><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
   }
   feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>');
+  loadPostReactionStates(feed);
  }catch(error){renderRequestError(error)}
 }
 
@@ -187,6 +203,7 @@ async function loadProfile(username){
   const posts=await api("/api/profile/"+encodeURIComponent(username)+"/posts");
   const target=document.querySelector("#profile-posts");
   target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This creator has not posted yet.</section>';
+  loadPostReactionStates(target);
  }catch(error){renderRequestError(error)}
 }
 document.addEventListener("click",async event=>{
