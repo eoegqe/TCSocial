@@ -246,6 +246,7 @@ document.addEventListener("click",async event=>{
    if(!response.ok)throw new Error(data.message||"Could not update follow status.");
    follow.textContent=data.following?"Following":"Follow";
    follow.setAttribute("aria-pressed",String(data.following));
+   const followerCount=document.querySelector("[data-follower-count]");if(followerCount){const match=followerCount.textContent.match(/[0-9,]+/);const current=Number(match?match[0].replace(/,/g,""):0);followerCount.textContent=Math.max(0,current+(data.following?1:-1)).toLocaleString()+" followers"}
    showToast(data.following?"You are now following @"+username+".":"You unfollowed @"+username+".");
   }catch(error){showToast(error.message)}
   finally{follow.disabled=false}
