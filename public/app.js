@@ -90,7 +90,7 @@ async function loadHome(){
    let identities=[];
    try{identities=(await api("/api/identities")).identities||[]}catch{}
    const options=identities.map(item=>'<option value="'+escapeHtml(item.id)+'">'+escapeHtml(item.display_name+' (@'+item.username+')')+'</option>').join("");
-   composer='<form id="post-composer" class="post-composer"><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
+   composer='<button class="compose-toggle" id="compose-toggle" type="button" aria-expanded="false" aria-controls="post-composer">+ Post</button><form id="post-composer" class="post-composer" hidden><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
   }
   feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>');
  }catch(error){renderRequestError(error)}
@@ -177,6 +177,17 @@ document.addEventListener("click",async event=>{
  if(event.target.closest("[data-close-auth]"))document.querySelector("#auth-modal").hidden=true;
  if(event.target.closest("[data-editor-close]"))closeProfileEditor();
  if(event.target.closest("#remove-profile-picture")){const form=document.querySelector("#profile-editor-form");form.dataset.removePhoto="true";form.elements.profile_picture_file.value="";document.querySelector("#profile-photo-preview").innerHTML='<span class="avatar">TC</span>';}
+});
+document.addEventListener("click",event=>{
+ const toggle=event.target.closest("#compose-toggle");
+ if(!toggle)return;
+ const form=document.querySelector("#post-composer");
+ if(!form)return;
+ const opening=form.hidden;
+ form.hidden=!opening;
+ toggle.setAttribute("aria-expanded",String(opening));
+ toggle.textContent=opening?"Cancel":"+ Post";
+ if(opening)form.querySelector("#post-content").focus();
 });
 document.addEventListener("submit",async event=>{
  if(event.target.id!=="post-composer")return;
