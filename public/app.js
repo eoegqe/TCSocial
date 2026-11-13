@@ -110,21 +110,39 @@ function renderError(status){
  }
  feed.innerHTML='<section class="error-shell"><div class="error-card"><p class="error-code">'+escapeHtml(code)+'</p><h2 class="error-title">'+escapeHtml(title)+'</h2><p class="error-message">'+escapeHtml(message)+'</p><a class="error-home" href="/">Back to TC Social</a></div></section>';
 }
-async function loadHome(){
- pageTitle.textContent=location.pathname==="/explore"?"Explore":"Home";
+async function loadRecommendations(){
+ const aside=document.querySelector("#recommendations");
+ if(!aside)return;
  try{
-  const data=await api("/api/feed");
+  const data=await api("/api/recommendations");
+  const items=data.recommendations||[];
+  aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div>'+(items.length?'<div class="recommendation-list">'+items.map(item=>'<a class="recommendation-item" href="/@'+encodeURIComponent(item.username)+'">'+avatar(item.profile_picture,item.display_name||item.username)+'<span class="recommendation-info"><strong>'+escapeHtml(item.display_name||item.username)+'</strong><small>@'+escapeHtml(item.username)+' · '+Number(item.follower_count||0).toLocaleString()+' followers</small></span></a>').join("")+'</div>':'<p class="recommendation-empty">No creators to recommend yet.</p>');
+ }catch{aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div><p class="recommendation-empty">Recommendations are temporarily unavailable.</p>'}
+}
+async function loadHome(){
+ const isExplore=location.pathname==="/explore";
+ pageTitle.textContent=isExplore?"Explore":"Home";
+ const aside=document.querySelector("#recommendations");
+ if(aside)aside.hidden=isExplore;
+ try{
+  const data=await api(isExplore?"/api/explore-feed":"/api/feed");
   const posts=data.posts||[];
   const signedIn=Boolean(sessionStorage.getItem("tc_social_access_token"));
   let composer="";
-  if(signedIn){
+  if(signedIn&&!isExplore){
    let identities=[];
    try{identities=(await api("/api/identities")).identities||[]}catch{}
    const options=identities.map(item=>'<option value="'+escapeHtml(item.id)+'">'+escapeHtml(item.display_name+' (@'+item.username+')')+'</option>').join("");
    composer='<button class="compose-toggle" id="compose-toggle" type="button" aria-expanded="false" aria-controls="post-composer">+ Post</button><form id="post-composer" class="post-composer" hidden><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
   }
-  feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>');
+  let empty;
+  if(posts.length)empty="";
+  else if(isExplore)empty='<section class="empty-card"><strong>No posts yet.</strong><p>Posts from the community will appear here.</p></section>';
+  else if(!signedIn)empty='<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow creators or managed pages to see their posts here. Visit Explore to discover the community.</p></section>';
+  else empty='<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Check Recommended or Explore to find creators.</p></section>';
+  feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):empty);
   loadPostReactionStates(feed);
+  if(!isExplore)loadRecommendations();
  }catch(error){renderRequestError(error)}
 }
 
@@ -196,7 +214,7 @@ async function loadProfile(username){
   const name=p.display_name||"@"+p.username;
   const canEdit=Boolean(p.can_manage)||(!p.is_page&&String(JSON.parse(sessionStorage.getItem("tc_social_user")||"null")?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase());
   const followButton=p.is_page||!canEdit?'<button class="post-action" data-follow="'+escapeHtml(p.username)+'" aria-pressed="false">Follow</button>':"";
-  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>'+(p.is_page?followButton:""):followButton)+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
+  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span><span class="follower-count" data-follower-count>'+Number(p.follower_count||0).toLocaleString()+' followers</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>'+(p.is_page?followButton:""):followButton)+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
   if(followButton&&sessionStorage.getItem("tc_social_access_token")){
    try{const status=await api("/api/follow/"+encodeURIComponent(p.username));const follow=feed.querySelector("[data-follow]");if(follow){follow.textContent=status.following?"Following":"Follow";follow.setAttribute("aria-pressed",String(status.following));}}catch{}
   }
