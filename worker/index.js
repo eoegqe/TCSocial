@@ -75,9 +75,9 @@ export default {
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
         if(!identityResponse.ok)return json({error:"unauthorized"},401);
         const identity=await identityResponse.json();
-        const user=await env.TC.prepare("SELECT id,username,display_name,profile_picture,verified FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
+        const user=await env.TC.prepare("SELECT id,username,display_name,profile_picture,verified,verification_type,is_tc_staff FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
         if(!user)return json({error:"social_account_required"},403);
-        const pages=await env.TC.prepare("SELECT p.id,p.handle,p.display_name,p.profile_picture,p.verified FROM social_pages p JOIN social_page_managers m ON m.page_id=p.id WHERE m.user_id=? AND p.status='active' ORDER BY p.display_name COLLATE NOCASE").bind(user.id).all();
+        const pages=await env.TC.prepare("SELECT p.id,p.handle,p.display_name,p.profile_picture,p.verified,p.verification_type,p.is_tc_staff FROM social_pages p JOIN social_page_managers m ON m.page_id=p.id WHERE m.user_id=? AND p.status='active' ORDER BY p.display_name COLLATE NOCASE").bind(user.id).all();
         return json({identities:[{id:"",type:"user",username:user.username,display_name:user.display_name||user.username,profile_picture:publicPicture(user.profile_picture,user.username),verified:Boolean(user.verified)},...(pages.results||[]).map(page=>({id:String(page.id),type:"page",username:page.handle,display_name:page.display_name,profile_picture:page.profile_picture,verified:Boolean(page.verified)}))]});
       }catch(error){console.error("TC Social identity list failed",String(error?.message||error));return json({error:"identities_unavailable"},503)}
     }
@@ -107,7 +107,7 @@ export default {
         }
         const createdAt=new Date().toISOString();
         const result=await env.TC.prepare("INSERT INTO social_posts (user_id,author_page_id,content,media_url,created_at) VALUES (?,?,?,NULL,?)").bind(user.id,pageId,content,createdAt).run();
-        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,COALESCE(sp.verified,u.verified,0) AS verified,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.id=? LIMIT 1").bind(result.meta?.last_row_id).first();
+        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,COALESCE(sp.verified,u.verified,0) AS verified,COALESCE(sp.verification_type,u.verification_type,'account') AS verification_type,COALESCE(sp.is_tc_staff,u.is_tc_staff,0) AS is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.id=? LIMIT 1").bind(result.meta?.last_row_id).first();
         return json({post:post?{...post,profile_picture:publicPicture(post.profile_picture,post.username)}:null},201);
       }catch(error){
         console.error("TC Social post creation failed",String(error?.message||error));
@@ -150,7 +150,7 @@ export default {
         const post=await env.TC.prepare("SELECT id FROM social_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first();
         if(!post)return notFound();
         if(kind==="comments"&&request.method==="GET"){
-          const result=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture,u.verified FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? AND c.deleted_at IS NULL AND u.status='active' ORDER BY c.created_at ASC LIMIT 100").bind(postId).all();
+          const result=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? AND c.deleted_at IS NULL AND u.status='active' ORDER BY c.created_at ASC LIMIT 100").bind(postId).all();
           return json({comments:publicPosts(result.results)});
         }
         if(kind==="reactions"&&request.method==="GET"){
@@ -187,7 +187,7 @@ export default {
           if(content.length>1000)return json({error:"comment_too_long",message:"Comments must be 1,000 characters or fewer."},400);
           const createdAt=new Date().toISOString();
           const result=await env.TC.prepare("INSERT INTO social_comments (post_id,user_id,content,created_at,updated_at) VALUES (?,?,?,?,?)").bind(postId,user.id,content,createdAt,createdAt).run();
-          const comment=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture,u.verified FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.id=?").bind(result.meta?.last_row_id).first();
+          const comment=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.id=?").bind(result.meta?.last_row_id).first();
           return json({comment:comment?{...comment,profile_picture:publicPicture(comment.profile_picture,comment.username)}:null},201);
         }
         return json({error:"method_not_allowed"},405);
@@ -330,7 +330,7 @@ export default {
       const username=decodeURIComponent(parts[2]||"").replace(/^@/,"");
       if(!username||username.length>64)return json({error:"invalid_username"},400);
       try{
-        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,social_links,verified,is_private FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,social_links,verified,verification_type,is_tc_staff,is_private FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
         if(!user){
           const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image,verified,verification_type,is_tc_staff FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
@@ -352,7 +352,7 @@ export default {
             const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0)}});
           }
           if(parts.length===4&&parts[3]==="posts"){
-            const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture,sp.verified,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
+            const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture,sp.verified,sp.verification_type,sp.is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
             return json({posts:publicPosts(pagePosts.results)});
           }
           return notFound();
@@ -373,7 +373,7 @@ export default {
         }
         if(parts.length===3){let canVerify=false,canEdit=false;const auth=request.headers.get("authorization")||"",tokenMatch=auth.match(/^Bearer\s+(.+)$/i);if(tokenMatch){const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});if(identityResponse.ok){const identity=await identityResponse.json();canVerify=Number(identity.sub)===1;canEdit=canVerify||Number(identity.sub)===user.id;}}const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_follows WHERE followed_id=?").bind(user.id).first();return json({profile:{...safeUser(user),is_page:false,can_verify:canVerify,can_edit:canEdit,follower_count:Number(followers?.count||0)}});}
         if(parts.length===4&&parts[3]==="posts"){
-          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture,u.verified,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.author_page_id IS NULL AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
+          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.author_page_id IS NULL AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
           return json({posts:publicPosts(result.results)});
         }
         return notFound();
@@ -389,7 +389,7 @@ export default {
         const identity=await identityResponse.json();
         const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
         if(!user)return json({posts:[]});
-        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,COALESCE(sp.verified,u.verified,0) AS verified,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.deleted_at IS NULL AND u.status='active' AND ((p.author_page_id IS NULL AND EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=? AND f.followed_id=p.user_id)) OR (p.author_page_id IS NOT NULL AND EXISTS(SELECT 1 FROM social_page_follows pf WHERE pf.follower_id=? AND pf.page_id=p.author_page_id))) ORDER BY p.created_at DESC LIMIT 50").bind(user.id,user.id).all();
+        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,COALESCE(sp.verified,u.verified,0) AS verified,COALESCE(sp.verification_type,u.verification_type,'account') AS verification_type,COALESCE(sp.is_tc_staff,u.is_tc_staff,0) AS is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.deleted_at IS NULL AND u.status='active' AND ((p.author_page_id IS NULL AND EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=? AND f.followed_id=p.user_id)) OR (p.author_page_id IS NOT NULL AND EXISTS(SELECT 1 FROM social_page_follows pf WHERE pf.follower_id=? AND pf.page_id=p.author_page_id))) ORDER BY p.created_at DESC LIMIT 50").bind(user.id,user.id).all();
         return json({posts:publicPosts(result.results)});
       }catch(error){console.error("TC Social followed feed failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
@@ -417,11 +417,11 @@ export default {
       }
       try{
         const users=viewerId
-          ?await env.TC.prepare("SELECT u.username,u.display_name,u.profile_picture,u.verified,'user' AS type,(SELECT COUNT(*) FROM social_follows f WHERE f.followed_id=u.id) AS follower_count FROM users u WHERE u.status='active' AND u.is_private=0 AND u.id<>? AND NOT EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=? AND f.followed_id=u.id) ORDER BY follower_count DESC,u.username COLLATE NOCASE LIMIT 6").bind(viewerId,viewerId).all()
-          :await env.TC.prepare("SELECT u.username,u.display_name,u.profile_picture,u.verified,'user' AS type,(SELECT COUNT(*) FROM social_follows f WHERE f.followed_id=u.id) AS follower_count FROM users u WHERE u.status='active' AND u.is_private=0 ORDER BY follower_count DESC,u.username COLLATE NOCASE LIMIT 6").all();
+          ?await env.TC.prepare("SELECT u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,'user' AS type,(SELECT COUNT(*) FROM social_follows f WHERE f.followed_id=u.id) AS follower_count FROM users u WHERE u.status='active' AND u.is_private=0 AND u.id<>? AND NOT EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=? AND f.followed_id=u.id) ORDER BY follower_count DESC,u.username COLLATE NOCASE LIMIT 6").bind(viewerId,viewerId).all()
+          :await env.TC.prepare("SELECT u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,'user' AS type,(SELECT COUNT(*) FROM social_follows f WHERE f.followed_id=u.id) AS follower_count FROM users u WHERE u.status='active' AND u.is_private=0 ORDER BY follower_count DESC,u.username COLLATE NOCASE LIMIT 6").all();
         const pages=viewerId
-          ?await env.TC.prepare("SELECT p.handle AS username,p.display_name,p.profile_picture,p.verified,'page' AS type,(SELECT COUNT(*) FROM social_page_follows f WHERE f.page_id=p.id) AS follower_count FROM social_pages p WHERE p.status='active' AND NOT EXISTS(SELECT 1 FROM social_page_follows f WHERE f.follower_id=? AND f.page_id=p.id) AND NOT EXISTS(SELECT 1 FROM social_page_managers m WHERE m.page_id=p.id AND m.user_id=?) ORDER BY follower_count DESC,p.display_name COLLATE NOCASE LIMIT 6").bind(viewerId,viewerId).all()
-          :await env.TC.prepare("SELECT p.handle AS username,p.display_name,p.profile_picture,p.verified,'page' AS type,(SELECT COUNT(*) FROM social_page_follows f WHERE f.page_id=p.id) AS follower_count FROM social_pages p WHERE p.status='active' ORDER BY follower_count DESC,p.display_name COLLATE NOCASE LIMIT 6").all();
+          ?await env.TC.prepare("SELECT p.handle AS username,p.display_name,p.profile_picture,p.verified,p.verification_type,p.is_tc_staff,'page' AS type,(SELECT COUNT(*) FROM social_page_follows f WHERE f.page_id=p.id) AS follower_count FROM social_pages p WHERE p.status='active' AND NOT EXISTS(SELECT 1 FROM social_page_follows f WHERE f.follower_id=? AND f.page_id=p.id) AND NOT EXISTS(SELECT 1 FROM social_page_managers m WHERE m.page_id=p.id AND m.user_id=?) ORDER BY follower_count DESC,p.display_name COLLATE NOCASE LIMIT 6").bind(viewerId,viewerId).all()
+          :await env.TC.prepare("SELECT p.handle AS username,p.display_name,p.profile_picture,p.verified,p.verification_type,p.is_tc_staff,'page' AS type,(SELECT COUNT(*) FROM social_page_follows f WHERE f.page_id=p.id) AS follower_count FROM social_pages p WHERE p.status='active' ORDER BY follower_count DESC,p.display_name COLLATE NOCASE LIMIT 6").all();
         const combined=[...(users.results||[]),...(pages.results||[])].sort((a,b)=>Number(b.follower_count)-Number(a.follower_count)).slice(0,8);
         return json({recommendations:combined.map(item=>({...item,profile_picture:publicPicture(item.profile_picture,item.username)}))});
       }catch(error){console.error("TC Social recommendations failed",String(error?.message||error));return json({error:"internal_error"},500)}
