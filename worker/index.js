@@ -318,7 +318,7 @@ export default {
           const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image,verified FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
           if(parts.length===3){
-            let canManage=false;
+            let canManage=false,canVerify=false;
             const auth=request.headers.get("authorization")||"";
             const tokenMatch=auth.match(/^Bearer\s+(.+)$/i);
             if(tokenMatch){
@@ -326,12 +326,13 @@ export default {
                 const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});
                 if(identityResponse.ok){
                   const identity=await identityResponse.json();
+                  canVerify=Number(identity.sub)===1;
                   const manager=await env.TC.prepare("SELECT role FROM social_page_managers WHERE page_id=? AND user_id=?").bind(page.id,Number(identity.sub)).first();
                   canManage=Boolean(manager&&["owner","admin"].includes(manager.role));
                 }
               }catch{}
             }
-            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),is_page:true,can_manage:canManage,can_verify:Number(identity?.sub)===1,follower_count:Number(followers?.count||0)}});
+            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0)}});
           }
           if(parts.length===4&&parts[3]==="posts"){
             const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture,sp.verified,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
