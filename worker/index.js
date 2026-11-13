@@ -26,6 +26,32 @@ export default {
         return new Response(bytes,{headers:{"content-type":match[1],"cache-control":"public, max-age=3600","x-content-type-options":"nosniff"}});
       }catch(error){console.error("TC Social avatar query failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
+    if(url.pathname==="/api/posts"&&request.method==="POST"){
+      const authorization=request.headers.get("authorization")||"";
+      const match=authorization.match(/^Bearer\s+(.+)$/i);
+      if(!match)return json({error:"unauthorized"},401);
+      try{
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({error:"unauthorized"},401);
+        const identity=await identityResponse.json();
+        const username=String(identity.preferred_username||"").trim();
+        if(!identity.sub||!username)return json({error:"unauthorized"},401);
+        const body=await request.json().catch(()=>null);
+        if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
+        const content=String(body.content||"").trim();
+        if(!content)return json({error:"empty_post",message:"Write something before posting."},400);
+        if(content.length>2000)return json({error:"post_too_long",message:"Posts must be 2,000 characters or fewer."},400);
+        const user=await env.TC.prepare("SELECT id FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        if(!user)return json({error:"social_account_required",message:"Your TC account needs an active TC Social profile before posting."},403);
+        const createdAt=new Date().toISOString();
+        const result=await env.TC.prepare("INSERT INTO social_posts (user_id,content,media_url,created_at) VALUES (?,?,NULL,?)").bind(user.id,content,createdAt).run();
+        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.id=? LIMIT 1").bind(result.meta?.last_row_id).first();
+        return json({post:post?{...post,profile_picture:publicPicture(post.profile_picture,post.username)}:null},201);
+      }catch(error){
+        console.error("TC Social post creation failed",String(error?.message||error));
+        return json({error:"internal_error"},500);
+      }
+    }
     if(url.pathname==="/api/profile/me"&&request.method==="PATCH"){
       const authorization=request.headers.get("authorization")||"";
       const match=authorization.match(/^Bearer\s+(.+)$/i);
