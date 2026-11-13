@@ -84,7 +84,7 @@ export default {
         }
         const createdAt=new Date().toISOString();
         const result=await env.TC.prepare("INSERT INTO social_posts (user_id,author_page_id,content,media_url,created_at) VALUES (?,?,?,NULL,?)").bind(user.id,pageId,content,createdAt).run();
-        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.id=? LIMIT 1").bind(result.meta?.last_row_id).first();
+        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.id=? LIMIT 1").bind(result.meta?.last_row_id).first();
         return json({post:post?{...post,profile_picture:publicPicture(post.profile_picture,post.username)}:null},201);
       }catch(error){
         console.error("TC Social post creation failed",String(error?.message||error));
