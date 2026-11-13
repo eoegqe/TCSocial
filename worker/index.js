@@ -26,6 +26,20 @@ export default {
         return new Response(bytes,{headers:{"content-type":match[1],"cache-control":"public, max-age=3600","x-content-type-options":"nosniff"}});
       }catch(error){console.error("TC Social avatar query failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
+    if(url.pathname==="/api/identities"&&request.method==="GET"){
+      const authorization=request.headers.get("authorization")||"";
+      const match=authorization.match(/^Bearer\\s+(.+)$/i);
+      if(!match)return json({error:"unauthorized"},401);
+      try{
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({error:"unauthorized"},401);
+        const identity=await identityResponse.json();
+        const user=await env.TC.prepare("SELECT id,username,display_name,profile_picture FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
+        if(!user)return json({error:"social_account_required"},403);
+        const pages=await env.TC.prepare("SELECT p.id,p.handle,p.display_name,p.profile_picture FROM social_pages p JOIN social_page_managers m ON m.page_id=p.id WHERE m.user_id=? AND p.status='active' ORDER BY p.display_name COLLATE NOCASE").bind(user.id).all();
+        return json({identities:[{id:"",type:"user",username:user.username,display_name:user.display_name||user.username,profile_picture:publicPicture(user.profile_picture,user.username)},...(pages.results||[]).map(page=>({id:String(page.id),type:"page",username:page.handle,display_name:page.display_name,profile_picture:page.profile_picture}))]});
+      }catch(error){console.error("TC Social identity list failed",String(error?.message||error));return json({error:"identities_unavailable"},503)}
+    }
     if(url.pathname==="/api/posts"&&request.method==="POST"){
       const authorization=request.headers.get("authorization")||"";
       const match=authorization.match(/^Bearer\s+(.+)$/i);
@@ -41,11 +55,17 @@ export default {
         const content=String(body.content||"").trim();
         if(!content)return json({error:"empty_post",message:"Write something before posting."},400);
         if(content.length>2000)return json({error:"post_too_long",message:"Posts must be 2,000 characters or fewer."},400);
-        const user=await env.TC.prepare("SELECT id FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),username).first();
         if(!user)return json({error:"social_account_required",message:"Your TC account needs an active TC Social profile before posting."},403);
+        const pageId=body.identity_id==null||body.identity_id===""?null:Number(body.identity_id);
+        if(pageId!==null){
+          if(!Number.isSafeInteger(pageId)||pageId<1)return json({error:"invalid_identity"},400);
+          const manager=await env.TC.prepare("SELECT p.id FROM social_pages p JOIN social_page_managers m ON m.page_id=p.id WHERE p.id=? AND m.user_id=? AND p.status='active'").bind(pageId,user.id).first();
+          if(!manager)return json({error:"identity_forbidden",message:"You do not have permission to publish as that page."},403);
+        }
         const createdAt=new Date().toISOString();
-        const result=await env.TC.prepare("INSERT INTO social_posts (user_id,content,media_url,created_at) VALUES (?,?,NULL,?)").bind(user.id,content,createdAt).run();
-        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.id=? LIMIT 1").bind(result.meta?.last_row_id).first();
+        const result=await env.TC.prepare("INSERT INTO social_posts (user_id,author_page_id,content,media_url,created_at) VALUES (?,?,?,NULL,?)").bind(user.id,pageId,content,createdAt).run();
+        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.id=? LIMIT 1").bind(result.meta?.last_row_id).first();
         return json({post:post?{...post,profile_picture:publicPicture(post.profile_picture,post.username)}:null},201);
       }catch(error){
         console.error("TC Social post creation failed",String(error?.message||error));
@@ -104,7 +124,7 @@ export default {
         if(!user)return notFound();
         if(parts.length===3)return json({profile:safeUser(user)});
         if(parts.length===4&&parts[3]==="posts"){
-          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
+          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE (p.user_id=? OR p.author_page_id IN (SELECT id FROM social_pages WHERE handle=? COLLATE NOCASE)) AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id,username).all();
           return json({posts:publicPosts(result.results)});
         }
         return notFound();
@@ -112,7 +132,7 @@ export default {
     }
     if(url.pathname==="/api/feed"&&request.method==="GET"){
       try{
-        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL AND u.status='active' ORDER BY p.created_at DESC LIMIT 30").all();
+        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.deleted_at IS NULL AND u.status='active' ORDER BY p.created_at DESC LIMIT 30").all();
         return json({posts:publicPosts(result.results)});
       }catch(error){console.error("TC Social feed query failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
