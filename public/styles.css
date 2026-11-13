@@ -34,7 +34,7 @@ h1,h2,h3,p{margin-top:0}
 .post-action:hover{border-color:#666;color:#fff}
 .post-media{display:block;width:100%;max-height:480px;object-fit:contain;background:#080808;border-radius:9px;margin-top:14px}
 .modal[hidden]{display:none}
-.modal{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:20px}
+.modal{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:20px;overflow-y:auto;overscroll-behavior:contain}.profile-editor-card{max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain;min-height:0}
 .modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(5px)}
 .modal-card{position:relative;width:min(100%,410px);padding:30px;background:#141414;border:1px solid #333;border-radius:15px;box-shadow:0 24px 80px #000}
 .modal-close{position:absolute;right:15px;top:12px;border:0;background:transparent;color:#999;font-size:25px;cursor:pointer}
