@@ -72,6 +72,75 @@ export default {
         return json({error:"internal_error"},500);
       }
     }
+    if(url.pathname.startsWith("/api/follow/")&&(request.method==="GET"||request.method==="POST"||request.method==="DELETE")){
+      const targetName=decodeURIComponent(url.pathname.slice("/api/follow/".length)).replace(/^@/,"");
+      if(!targetName||targetName.length>64)return json({error:"invalid_username"},400);
+      try{
+        const target=await env.TC.prepare("SELECT id FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(targetName).first();
+        if(!target)return notFound();
+        const authorization=request.headers.get("authorization")||"";
+        const match=authorization.match(/^Bearer\\s+(.+)$/i);
+        if(!match){
+          if(request.method==="GET")return json({following:false});
+          return json({error:"unauthorized"},401);
+        }
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({error:"unauthorized"},401);
+        const identity=await identityResponse.json();
+        const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
+        if(!user)return json({error:"social_account_required"},403);
+        if(user.id===target.id)return json({error:"cannot_follow_self"},400);
+        if(request.method==="POST"){
+          await env.TC.prepare("INSERT OR IGNORE INTO social_follows (follower_id,followed_id) VALUES (?,?)").bind(user.id,target.id).run();
+        }else if(request.method==="DELETE"){
+          await env.TC.prepare("DELETE FROM social_follows WHERE follower_id=? AND followed_id=?").bind(user.id,target.id).run();
+        }
+        const relation=await env.TC.prepare("SELECT 1 AS following FROM social_follows WHERE follower_id=? AND followed_id=?").bind(user.id,target.id).first();
+        return json({following:Boolean(relation)});
+      }catch(error){console.error("TC Social follow request failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
+    if(url.pathname.startsWith("/api/pages/")&&request.method==="PATCH"){
+      const pageId=Number(url.pathname.slice("/api/pages/".length));
+      if(!Number.isSafeInteger(pageId)||pageId<1)return json({error:"invalid_page"},400);
+      const authorization=request.headers.get("authorization")||"";
+      const match=authorization.match(/^Bearer\\s+(.+)$/i);
+      if(!match)return json({error:"unauthorized"},401);
+      try{
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({error:"unauthorized"},401);
+        const identity=await identityResponse.json();
+        const userId=Number(identity.sub);
+        const manager=await env.TC.prepare("SELECT role FROM social_page_managers WHERE page_id=? AND user_id=?").bind(pageId,userId).first();
+        if(!manager||!["owner","admin"].includes(manager.role))return json({error:"forbidden"},403);
+        const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture FROM social_pages WHERE id=? AND status='active'").bind(pageId).first();
+        if(!page)return notFound();
+        const body=await request.json().catch(()=>null);
+        if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
+        const displayName=String(body.display_name??page.display_name).trim();
+        const handle=String(body.handle??page.handle).trim();
+        if(!displayName||displayName.length>80)return json({error:"invalid_display_name"},400);
+        if(!/^[A-Za-z0-9_]{3,24}$/.test(handle)&&handle.toLowerCase()!=="tc")return json({error:"invalid_handle",message:"Handles must be 3–24 letters, numbers, or underscores. @TC is reserved."},400);
+        let picture=Object.prototype.hasOwnProperty.call(body,"profile_picture")?(body.profile_picture==null||String(body.profile_picture).trim()===""?null:String(body.profile_picture).trim()):page.profile_picture;
+        if(picture&&picture.startsWith("data:")){
+          const uploaded=picture.match(/^data:(image\\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
+          if(!uploaded)return json({error:"invalid_image"},400);
+          let decoded;try{decoded=atob(uploaded[2])}catch{return json({error:"invalid_image"},400)}
+          if(decoded.length>400000)return json({error:"image_too_large"},413);
+          picture="upload:"+uploaded[1]+":"+uploaded[2];
+        }
+        if(picture&&!picture.startsWith("upload:")){
+          let imageUrl;try{imageUrl=new URL(picture)}catch{return json({error:"invalid_profile_picture_url"},400)}
+          if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url"},400);
+          if(picture.length>2048)return json({error:"profile_picture_url_too_long"},400);
+        }
+        await env.TC.prepare("UPDATE social_pages SET handle=?,display_name=?,profile_picture=? WHERE id=?").bind(handle,displayName,picture,pageId).run();
+        return json({profile:{id:pageId,username:handle,display_name:displayName,profile_picture:picture,is_page:true,can_manage:true}});
+      }catch(error){
+        if(String(error?.message||"").includes("UNIQUE"))return json({error:"handle_taken",message:"That handle is already in use."},409);
+        console.error("TC Social page update failed",String(error?.message||error));
+        return json({error:"internal_error"},500);
+      }
+    }
     if(url.pathname==="/api/profile/me"&&request.method==="PATCH"){
       const authorization=request.headers.get("authorization")||"";
       const match=authorization.match(/^Bearer\s+(.+)$/i);
@@ -124,7 +193,22 @@ export default {
         if(!user){
           const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
-          if(parts.length===3)return json({profile:{username:page.handle,display_name:page.display_name,bio:null,profile_picture:page.profile_picture,is_page:true}});
+          if(parts.length===3){
+            let canManage=false;
+            const auth=request.headers.get("authorization")||"";
+            const tokenMatch=auth.match(/^Bearer\\s+(.+)$/i);
+            if(tokenMatch){
+              try{
+                const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});
+                if(identityResponse.ok){
+                  const identity=await identityResponse.json();
+                  const manager=await env.TC.prepare("SELECT role FROM social_page_managers WHERE page_id=? AND user_id=?").bind(page.id,Number(identity.sub)).first();
+                  canManage=Boolean(manager);
+                }
+              }catch{}
+            }
+            return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:page.profile_picture,is_page:true,can_manage:canManage}});
+          }
           if(parts.length===4&&parts[3]==="posts"){
             const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
             return json({posts:publicPosts(pagePosts.results)});
