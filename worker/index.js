@@ -3,7 +3,7 @@ const notFound=()=>json({error:"not_found"},404);
 const publicPicture=(value,username)=>String(value||"").startsWith("upload:")?"/api/avatar/"+encodeURIComponent(username):value;
 const bannerVersion=value=>{let hash=2166136261;for(let i=0;i<value.length;i++)hash=Math.imul(hash^value.charCodeAt(i),16777619);return (hash>>>0).toString(36)};
 const publicBanner=(value,username)=>String(value||"").startsWith("upload:")?"/api/banner/"+encodeURIComponent(username)+"?v="+bannerVersion(String(value)):value;
-const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),verified:Boolean(row.verified),is_private:Boolean(row.is_private)});
+const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),social_links:(()=>{try{return JSON.parse(row.social_links||"{}")}catch{return {}}})(),verified:Boolean(row.verified),is_private:Boolean(row.is_private)});
 const publicPosts=rows=>(rows||[]).map(row=>({...row,profile_picture:publicPicture(row.profile_picture,row.username)}));
 export default {
   async fetch(request,env){
@@ -309,7 +309,7 @@ export default {
           try{imageUrl=new URL(picture)}catch{return json({error:"invalid_profile_picture_url",message:"Profile picture must be a valid HTTPS image URL."},400)}
           if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url",message:"Profile picture must use HTTPS."},400);
         }
-        await env.TC.prepare("UPDATE users SET display_name=?,bio=?,is_private=COALESCE(?,is_private),profile_picture=CASE WHEN ?=1 THEN ? ELSE profile_picture END,banner_image=CASE WHEN ?=1 THEN ? ELSE banner_image END WHERE id=? AND status='active'").bind(displayName,bio,isPrivate===undefined?null:(isPrivate?1:0),Object.prototype.hasOwnProperty.call(body,"profile_picture")?1:0,picture??null,Object.prototype.hasOwnProperty.call(body,"banner_image")?1:0,banner??null,target.id).run();
+        await env.TC.prepare("UPDATE users SET display_name=?,bio=?,is_private=COALESCE(?,is_private),profile_picture=CASE WHEN ?=1 THEN ? ELSE profile_picture END,banner_image=CASE WHEN ?=1 THEN ? ELSE banner_image END,social_links=COALESCE(?,social_links) WHERE id=? AND status='active'").bind(displayName,bio,isPrivate===undefined?null:(isPrivate?1:0),Object.prototype.hasOwnProperty.call(body,"profile_picture")?1:0,picture??null,Object.prototype.hasOwnProperty.call(body,"banner_image")?1:0,banner??null,Object.prototype.hasOwnProperty.call(body,"social_links")?JSON.stringify((()=>{const input=body.social_links;if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("invalid_social_links");const allowed=["youtube","instagram","tiktok","spotify","twitch","website"],output={};for(const key of allowed){const value=String(input[key]||"").trim();if(!value)continue;if(value.length>500)throw new Error("invalid_social_link");let parsed;try{parsed=new URL(value)}catch{throw new Error("invalid_social_link")}if(parsed.protocol!=="https:")throw new Error("invalid_social_link");output[key]=parsed.toString()}return output})()):null,target.id).run();
         const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture,banner_image,verified,is_private FROM users WHERE id=? AND status='active'").bind(target.id).first();
         if(!updated)return notFound();
         return json({profile:safeUser(updated)});
@@ -324,7 +324,7 @@ export default {
       const username=decodeURIComponent(parts[2]||"").replace(/^@/,"");
       if(!username||username.length>64)return json({error:"invalid_username"},400);
       try{
-        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,verified,is_private FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,social_links,verified,is_private FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
         if(!user){
           const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image,verified FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
