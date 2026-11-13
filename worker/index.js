@@ -10,8 +10,9 @@ export default {
     if((url.pathname==="/"||url.pathname==="/index.html")&&request.method==="GET"){
       const asset=await env.ASSETS.fetch(request);
       let html=await asset.text();
-      html=html.replace(/<aside class="side-column">[\\s\\S]*?<\\/aside>/,"");
-      html=html.replace(/<aside class="right-column">[\\s\\S]*?<\\/aside>/,"");
+      const removeAside=(input,marker)=>{const start=input.indexOf(marker);if(start<0)return input;const end=input.indexOf("</aside>",start);return end<0?input:input.slice(0,start)+input.slice(end+8)};
+      html=removeAside(html,'<aside class="side-column">');
+      html=removeAside(html,'<aside class="right-column">');
       html=html.replace("/styles.css?v=20261112-2","/styles.css?v=20261113-layout-1");
       html=html.replace("</head>",'<style>.layout{display:block;width:min(1040px,calc(100% - 48px));margin:34px auto}.main-column{width:100%;min-width:0}.site-footer{font-size:10px;color:#666;padding:24px 2px;text-align:center}@media(max-width:650px){.layout{width:calc(100% - 28px);margin:22px auto}}</style></head>');
       return new Response(html,{status:asset.status,headers:asset.headers});
