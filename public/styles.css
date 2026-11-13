@@ -88,3 +88,15 @@ h1,h2,h3,p{margin-top:0}
 .compose-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;margin:0 0 12px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:10px;padding:12px 16px;font:700 13px "DM Sans",sans-serif;cursor:pointer;transition:background .15s,border-color .15s}
 .compose-toggle:hover{background:var(--surface-hover);border-color:#555}
 #feed .post-composer[hidden]{display:none!important}
+
+.comments-panel{border-top:1px solid var(--line);margin-top:13px;padding-top:13px}
+.comments-panel[hidden]{display:none}
+.comments-list{display:grid;gap:12px}
+.comment{padding:10px 12px;background:#0c0c0c;border:1px solid #252525;border-radius:9px}
+.comment strong{font-size:11px}.comment small{display:block;color:#777;font-size:9px;margin-top:3px}.comment p{font-size:12px;line-height:1.6;color:#ddd;white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 0 0}
+.no-comments{font-size:11px;color:#777;margin:0}
+.comment-form{display:grid;gap:8px;margin-top:12px}
+.comment-form textarea{width:100%;resize:vertical;min-height:55px;border:1px solid #333;border-radius:8px;background:#0b0b0b;color:#f4f4f4;padding:10px;font:12px/1.5 "DM Sans",sans-serif}
+.comment-form>div{display:flex;align-items:center;justify-content:space-between}.comment-form>div span{font-size:9px;color:#777}
+.comment-error{font-size:10px;color:#ef9b9b;margin:0;min-height:0}
+.post-action.is-active{background:#eee;color:#111;border-color:#eee}
