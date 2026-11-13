@@ -114,13 +114,15 @@ async function resizeProfilePhoto(file){
 }
 function openProfileEditor(profile){
  closeProfileEditor();
+ const isPage=Boolean(profile.is_page);
  const modal=document.createElement("div");
  modal.id="profile-editor-modal";
  modal.className="modal";
- modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">CREATOR SETTINGS</span><h2 id="profile-editor-title">Edit Creator page</h2><form id="profile-editor-form"><label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" placeholder="Your display name"><label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea><label for="edit-profile-picture">Profile photo</label><input id="edit-profile-picture" name="profile_picture_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="profile-photo-preview" id="profile-photo-preview"></div><button type="button" class="post-action" id="remove-profile-picture">Remove photo</button><p class="editor-hint">Choose a PNG, JPEG, or WebP image. It will be resized before upload.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
+ modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">'+(isPage?'PAGE SETTINGS':'CREATOR SETTINGS')+'</span><h2 id="profile-editor-title">'+(isPage?'Edit subaccount':'Edit Creator page')+'</h2><form id="profile-editor-form" data-page-id="'+(isPage?escapeHtml(profile.id):'')+'">'+(isPage?'<label for="edit-handle">Handle</label><input id="edit-handle" name="handle" maxlength="24" minlength="3" pattern="[A-Za-z0-9_]{3,24}" required>':'')+'<label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" required placeholder="Display name">'+(isPage?'':'<label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea>')+'<label for="edit-profile-picture">Profile photo</label><input id="edit-profile-picture" name="profile_picture_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="profile-photo-preview" id="profile-photo-preview"></div><button type="button" class="post-action" id="remove-profile-picture">Remove photo</button><p class="editor-hint">Choose a PNG, JPEG, or WebP image. It will be resized before upload.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
  document.body.append(modal);
  modal.querySelector('[name="display_name"]').value=profile.display_name||"";
- modal.querySelector('[name="bio"]').value=profile.bio||"";
+ if(isPage)modal.querySelector('[name="handle"]').value=profile.username||"";
+ else modal.querySelector('[name="bio"]').value=profile.bio||"";
  modal.querySelector("#profile-photo-preview").innerHTML=avatar(profile.profile_picture,profile.display_name||profile.username);
  modal.querySelector('[name="display_name"]').focus();
 }
@@ -130,19 +132,25 @@ async function saveProfileEditor(form){
  const submit=form.querySelector('[type="submit"]');
  submit.disabled=true;submit.textContent="Saving…";errorBox.textContent="";
  try{
-  const values={display_name:form.elements.display_name.value,bio:form.elements.bio.value};
+  const isPage=Boolean(form.dataset.pageId);
+  const values={display_name:form.elements.display_name.value};
+  if(isPage)values.handle=form.elements.handle.value.trim();
+  else values.bio=form.elements.bio.value;
   const file=form.elements.profile_picture_file.files[0];
   if(file)values.profile_picture=await resizeProfilePhoto(file);
   if(form.dataset.removePhoto==="true")values.profile_picture="";
-  const response=await fetch("/api/profile/me",{method:"PATCH",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+token},credentials:"same-origin",body:JSON.stringify(values)});
+  const endpoint=isPage?"/api/pages/"+encodeURIComponent(form.dataset.pageId):"/api/profile/me";
+  const response=await fetch(endpoint,{method:"PATCH",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+token},credentials:"same-origin",body:JSON.stringify(values)});
   const data=await response.json().catch(()=>({}));
   if(!response.ok){const messages={image_too_large:"The resized photo must be 400 KB or smaller.",invalid_image:"Choose a PNG, JPEG, or WebP photo.",unauthorized:"Your TC sign-in has expired. Please sign in again.",display_name_too_long:"Display name must be 80 characters or fewer.",bio_too_long:"Bio must be 500 characters or fewer.",invalid_profile_picture_url:"Profile picture must be a valid HTTPS URL."};throw new Error(messages[data.error]||data.message||"Your Creator page could not be saved. Please try again.");}
   closeProfileEditor();
-  showToast("Creator page updated.");
+  showToast(isPage?"Subaccount updated.":"Creator page updated.");
+  history.replaceState({}, "", "/@"+encodeURIComponent(data.profile.username));
   loadProfile(data.profile.username);
   const user=JSON.parse(sessionStorage.getItem("tc_social_user")||"null");
-  if(user&&String(user.preferred_username||"").toLowerCase()===String(data.profile.username).toLowerCase()){
+  if(!isPage&&user&&String(user.preferred_username||"").toLowerCase()===String(data.profile.username).toLowerCase()){
    user.picture=data.profile.profile_picture||"";
+   user.display_name=data.profile.display_name||user.display_name;
    sessionStorage.setItem("tc_social_user",JSON.stringify(user));
    updateSignInState(user);
   }
@@ -155,9 +163,12 @@ async function loadProfile(username){
   const data=await api("/api/profile/"+encodeURIComponent(username));
   const p=data.profile;
   const name=p.display_name||"@"+p.username;
-  const signedInUser=JSON.parse(sessionStorage.getItem("tc_social_user")||"null");
-  const isOwnPage=String(signedInUser?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase();
-  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span></div>'+(isOwnPage?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>':'<button class="post-action" data-auth-action="follow">Follow</button>')+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
+  const canEdit=Boolean(p.can_manage)||(!p.is_page&&String(JSON.parse(sessionStorage.getItem("tc_social_user")||"null")?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase());
+  const followButton=!p.is_page&&!canEdit?'<button class="post-action" data-follow="'+escapeHtml(p.username)+'">Follow</button>':"";
+  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>':followButton)+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
+  if(followButton&&sessionStorage.getItem("tc_social_access_token")){
+   try{const status=await api("/api/follow/"+encodeURIComponent(p.username));const follow=feed.querySelector("[data-follow]");if(follow){follow.textContent=status.following?"Following":"Follow";follow.setAttribute("aria-pressed",String(status.following));}}catch{}
+  }
   const posts=await api("/api/profile/"+encodeURIComponent(username)+"/posts");
   const target=document.querySelector("#profile-posts");
   target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This creator has not posted yet.</section>';
@@ -173,6 +184,23 @@ document.addEventListener("click",async event=>{
  if(!event.target.closest(".account-menu-wrap")){const dropdown=document.querySelector("[data-account-dropdown]");const toggle=document.querySelector("[data-tc-header-account][aria-expanded]");if(dropdown)dropdown.hidden=true;if(toggle)toggle.setAttribute("aria-expanded","false")}
  const signIn=event.target.closest("[data-tc-signin]");
  if(signIn){event.preventDefault();beginSignIn();return}
+ const follow=event.target.closest("[data-follow]");
+ if(follow){
+  if(!sessionStorage.getItem("tc_social_access_token")){document.querySelector("#auth-modal").hidden=false;return}
+  const username=follow.dataset.follow;
+  const wasFollowing=follow.getAttribute("aria-pressed")==="true";
+  follow.disabled=true;
+  try{
+   const response=await fetch("/api/follow/"+encodeURIComponent(username),{method:wasFollowing?"DELETE":"POST",headers:{accept:"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},credentials:"same-origin"});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(data.message||"Could not update follow status.");
+   follow.textContent=data.following?"Following":"Follow";
+   follow.setAttribute("aria-pressed",String(data.following));
+   showToast(data.following?"You are now following @"+username+".":"You unfollowed @"+username+".");
+  }catch(error){showToast(error.message)}
+  finally{follow.disabled=false}
+  return;
+ }
  const action=event.target.closest("[data-auth-action]");
  if(action){document.querySelector("#auth-modal").hidden=false;return}
  if(event.target.closest("[data-close-auth]"))document.querySelector("#auth-modal").hidden=true;
