@@ -3,7 +3,7 @@ const notFound=()=>json({error:"not_found"},404);
 const publicPicture=(value,username)=>String(value||"").startsWith("upload:")?"/api/avatar/"+encodeURIComponent(username):value;
 const bannerVersion=value=>{let hash=2166136261;for(let i=0;i<value.length;i++)hash=Math.imul(hash^value.charCodeAt(i),16777619);return (hash>>>0).toString(36)};
 const publicBanner=(value,username)=>String(value||"").startsWith("upload:")?"/api/banner/"+encodeURIComponent(username)+"?v="+bannerVersion(String(value)):value;
-const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),social_links:(()=>{try{return JSON.parse(row.social_links||"{}")}catch{return {}}})(),verified:Boolean(row.verified),verification_type:row.verification_type||"account",is_private:Boolean(row.is_private)});
+const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),social_links:(()=>{try{return JSON.parse(row.social_links||"{}")}catch{return {}}})(),verified:Boolean(row.verified),verification_type:row.verification_type||"account",is_tc_staff:Boolean(row.is_tc_staff),is_private:Boolean(row.is_private)});
 const publicPosts=rows=>(rows||[]).map(row=>({...row,profile_picture:publicPicture(row.profile_picture,row.username)}));
 export default {
   async fetch(request,env){
@@ -15,9 +15,9 @@ export default {
       const removeAside=(input,marker)=>{const start=input.indexOf(marker);if(start<0)return input;const end=input.indexOf("</aside>",start);return end<0?input:input.slice(0,start)+input.slice(end+8)};
       html=removeAside(html,'<aside class="side-column">');
       html=removeAside(html,'<aside class="right-column">');
-      html=html.replace("/styles.css?v=20261112-2","/styles.css?v=20261113-social-staff-verification-1");
-      html=html.replace("/styles.css?v=20261113-profiles-admin-1","/styles.css?v=20261113-social-staff-verification-1");
-      html=html.replace("/app.js?v=20261113-profiles-admin-1","/app.js?v=20261113-social-staff-verification-1");
+      html=html.replace("/styles.css?v=20261112-2","/styles.css?v=20261113-social-dual-badges-1");
+      html=html.replace("/styles.css?v=20261113-profiles-admin-1","/styles.css?v=20261113-social-dual-badges-1");
+      html=html.replace("/app.js?v=20261113-profiles-admin-1","/app.js?v=20261113-social-dual-badges-1");
       html=html.replace("</head>",'<style>.layout{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:22px;align-items:start;width:min(1240px,calc(100% - 48px));margin:34px auto}.main-column{width:100%;min-width:0}.recommendations-column{position:sticky;top:90px;align-self:start;background:#111;border:1px solid #262626;border-radius:13px;padding:17px;min-width:0}.recommendations-column[hidden]{display:none}.site-footer{font-size:10px;color:#666;padding:24px 2px;text-align:center}@media(max-width:850px){.layout{grid-template-columns:minmax(0,1fr) 230px;gap:14px}}@media(max-width:650px){.layout{display:block;width:calc(100% - 28px);margin:22px auto}.recommendations-column{position:static;margin-top:18px}}.modal{overflow-y:auto;overscroll-behavior:contain}.profile-editor-card{max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain;min-height:0}.profile-banner{width:100%;height:auto;min-height:0;max-height:none;aspect-ratio:auto;display:block;overflow:visible;background:#080808;border-radius:9px;margin-bottom:20px}.profile-banner img{display:block;width:100%;height:auto;max-height:360px;object-fit:contain;object-position:center}</style></head>');
       return new Response(html,{status:asset.status,headers:asset.headers});
     }
@@ -202,10 +202,11 @@ export default {
         const identity=await identityResponse.json();
         if(Number(identity.sub)!==1)return json({error:"forbidden"},403);
         const body=await request.json().catch(()=>null);
-        if(!body||!["user","page"].includes(body.type)||typeof body.username!=="string"||typeof body.verified!=="boolean"||!["account","business","group","staff"].includes(body.verification_type))return json({error:"invalid_body"},400);
-        const result=body.type==="user"
-          ?await env.TC.prepare("UPDATE users SET verified=?,verification_type=? WHERE username=? COLLATE NOCASE AND status='active'").bind(body.verified?1:0,body.verified?body.verification_type:"account",body.username).run()
-          :await env.TC.prepare("UPDATE social_pages SET verified=?,verification_type=? WHERE handle=? COLLATE NOCASE AND status='active'").bind(body.verified?1:0,body.verified?body.verification_type:"account",body.username).run();
+        if(!body||!["user","page"].includes(body.type)||typeof body.username!=="string"||typeof body.verified!=="boolean"||!["account","business","group"].includes(body.verification_type)||body.staff!==undefined&&typeof body.staff!=="boolean")return json({error:"invalid_body"},400);
+        const table=body.type==="user"?"users":"social_pages",nameColumn=body.type==="user"?"username":"handle";
+        const result=body.staff!==undefined
+          ?await env.TC.prepare("UPDATE "+table+" SET is_tc_staff=? WHERE "+nameColumn+"=? COLLATE NOCASE AND status='active'").bind(body.staff?1:0,body.username).run()
+          :await env.TC.prepare("UPDATE "+table+" SET verified=?,verification_type=? WHERE "+nameColumn+"=? COLLATE NOCASE AND status='active'").bind(body.verified?1:0,body.verified?body.verification_type:"account",body.username).run();
         if(!result.meta?.changes)return notFound();
         return json({verified:body.verified});
       }catch(error){console.error("TC Social verification update failed",String(error?.message||error));return json({error:"internal_error"},500)}
@@ -331,7 +332,7 @@ export default {
       try{
         const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,social_links,verified,is_private FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
         if(!user){
-          const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image,verified,verification_type FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+          const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image,verified,verification_type,is_tc_staff FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
           if(parts.length===3){
             let canManage=false,canVerify=false;
@@ -348,7 +349,7 @@ export default {
                 }
               }catch{}
             }
-            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0)}});
+            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0)}});
           }
           if(parts.length===4&&parts[3]==="posts"){
             const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture,sp.verified,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
