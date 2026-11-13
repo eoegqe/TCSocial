@@ -2,7 +2,7 @@ const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:
 const notFound=()=>json({error:"not_found"},404);
 const publicPicture=(value,username)=>String(value||"").startsWith("upload:")?"/api/avatar/"+encodeURIComponent(username):value;
 const publicBanner=(value,username)=>String(value||"").startsWith("upload:")?"/api/banner/"+encodeURIComponent(username):value;
-const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),verified:Boolean(row.verified)});
+const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),verified:Boolean(row.verified),is_private:Boolean(row.is_private)});
 const publicPosts=rows=>(rows||[]).map(row=>({...row,profile_picture:publicPicture(row.profile_picture,row.username)}));
 export default {
   async fetch(request,env){
@@ -270,6 +270,7 @@ export default {
         const displayName=body.display_name==null||String(body.display_name).trim()===""?null:String(body.display_name).trim();
         const bio=body.bio==null||String(body.bio).trim()===""?null:String(body.bio).trim();
         let picture=Object.prototype.hasOwnProperty.call(body,"profile_picture")?(body.profile_picture==null||String(body.profile_picture).trim()===""?null:String(body.profile_picture).trim()):undefined;
+        const isPrivate=Object.prototype.hasOwnProperty.call(body,"is_private")?Boolean(body.is_private):undefined;
         let banner=Object.prototype.hasOwnProperty.call(body,"banner_image")?(body.banner_image==null||String(body.banner_image).trim()===""?null:String(body.banner_image).trim()):undefined;
         if(picture&&picture.startsWith("data:")){
           const uploaded=picture.match(/^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
@@ -298,9 +299,9 @@ export default {
           try{imageUrl=new URL(picture)}catch{return json({error:"invalid_profile_picture_url",message:"Profile picture must be a valid HTTPS image URL."},400)}
           if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url",message:"Profile picture must use HTTPS."},400);
         }
-        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,profile_picture=CASE WHEN ?=1 THEN ? ELSE profile_picture END,banner_image=CASE WHEN ?=1 THEN ? ELSE banner_image END WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,Object.prototype.hasOwnProperty.call(body,"profile_picture")?1:0,picture,Object.prototype.hasOwnProperty.call(body,"banner_image")?1:0,banner,username).run();
+        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,is_private=COALESCE(?,is_private),profile_picture=CASE WHEN ?=1 THEN ? ELSE profile_picture END,banner_image=CASE WHEN ?=1 THEN ? ELSE banner_image END WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,isPrivate===undefined?null:(isPrivate?1:0),Object.prototype.hasOwnProperty.call(body,"profile_picture")?1:0,picture,Object.prototype.hasOwnProperty.call(body,"banner_image")?1:0,banner,username).run();
         if(!result.meta?.changes)return notFound();
-        const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture,banner_image,verified FROM users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
+        const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture,banner_image,verified,is_private FROM users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
         return json({profile:safeUser(updated)});
       }catch(error){
         console.error("TC Social profile update failed",String(error?.message||error));
@@ -313,7 +314,7 @@ export default {
       const username=decodeURIComponent(parts[2]||"").replace(/^@/,"");
       if(!username||username.length>64)return json({error:"invalid_username"},400);
       try{
-        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,verified FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,verified,is_private FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
         if(!user){
           const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image,verified FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
