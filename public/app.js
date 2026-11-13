@@ -67,7 +67,7 @@ function renderPost(post){
  const name=post.display_name||"@"+post.username;
  const mediaUrl=safeMediaUrl(post.media_url);
  const media=mediaUrl?(/\.(mp4|webm|ogg)(?:$|\?)/i.test(mediaUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(mediaUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(mediaUrl)+'" alt="Post media">'):"";
- return '<article class="post"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+'<div class="post-actions"><button class="post-action" data-auth-action="react">React</button><button class="post-action" data-auth-action="comment">Comment</button></div></article>';
+ return '<article class="post" data-post-id="'+escapeHtml(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+'<div class="post-actions"><button class="post-action" data-react aria-pressed="false">Like <span data-reaction-count>'+Number(post.reaction_count||0)+'</span></button><button class="post-action" data-comments-toggle aria-expanded="false">Comments <span data-comment-count>'+Number(post.comment_count||0)+'</span></button></div><section class="comments-panel" data-comments-panel hidden><div class="comments-list" data-comments-list></div><form class="comment-form"><textarea name="content" maxlength="1000" rows="2" placeholder="Write a comment…" required></textarea><div><span>1,000 characters max</span><button class="post-action" type="submit">Comment</button></div><p class="comment-error" role="alert"></p></form></section></article>';
 }
 function renderBotBlockedError(){
  const messages=["sorry clanker You can\u0027t access this action yeah I\u0027ll just call you that until you verify","clanker... You in fact do not have access","look at the sign. We are anti-bot\u0027s"];
@@ -179,8 +179,8 @@ async function loadProfile(username){
   const p=data.profile;
   const name=p.display_name||"@"+p.username;
   const canEdit=Boolean(p.can_manage)||(!p.is_page&&String(JSON.parse(sessionStorage.getItem("tc_social_user")||"null")?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase());
-  const followButton=!p.is_page&&!canEdit?'<button class="post-action" data-follow="'+escapeHtml(p.username)+'">Follow</button>':"";
-  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>':followButton)+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
+  const followButton=p.is_page||!canEdit?'<button class="post-action" data-follow="'+escapeHtml(p.username)+'" aria-pressed="false">Follow</button>':"";
+  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>'+(p.is_page?followButton:""):followButton)+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
   if(followButton&&sessionStorage.getItem("tc_social_access_token")){
    try{const status=await api("/api/follow/"+encodeURIComponent(p.username));const follow=feed.querySelector("[data-follow]");if(follow){follow.textContent=status.following?"Following":"Follow";follow.setAttribute("aria-pressed",String(status.following));}}catch{}
   }
@@ -216,8 +216,31 @@ document.addEventListener("click",async event=>{
   finally{follow.disabled=false}
   return;
  }
- const action=event.target.closest("[data-auth-action]");
- if(action){if(!await requireSignIn())return;showToast(action.dataset.authAction==="react"?"Reactions are not available yet.":"Comments are not available yet.");return}
+ const react=event.target.closest("[data-react]");
+ if(react){
+  if(!await requireSignIn())return;
+  const post=react.closest("[data-post-id]"),was=react.getAttribute("aria-pressed")==="true";
+  react.disabled=true;
+  try{
+   const response=await fetch("/api/posts/"+post.dataset.postId+"/reactions",{method:was?"DELETE":"POST",headers:{accept:"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")}});
+   const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not update reaction.");
+   react.setAttribute("aria-pressed",String(data.reacted));react.querySelector("[data-reaction-count]").textContent=data.count;react.classList.toggle("is-active",data.reacted);
+  }catch(error){showToast(error.message)}finally{react.disabled=false}
+  return;
+ }
+ const commentsToggle=event.target.closest("[data-comments-toggle]");
+ if(commentsToggle){
+  const post=commentsToggle.closest("[data-post-id]"),panel=post.querySelector("[data-comments-panel]"),opening=panel.hidden;
+  panel.hidden=!opening;commentsToggle.setAttribute("aria-expanded",String(opening));
+  if(opening&&!panel.dataset.loaded){
+   try{
+    const response=await fetch("/api/posts/"+post.dataset.postId+"/comments");const data=await response.json();if(!response.ok)throw new Error("Could not load comments.");
+    panel.querySelector("[data-comments-list]").innerHTML=data.comments?.length?data.comments.map(comment=>'<div class="comment"><strong>'+escapeHtml(comment.display_name||comment.username)+'</strong><small>@'+escapeHtml(comment.username)+' · '+escapeHtml(time(comment.created_at))+'</small><p>'+escapeHtml(comment.content)+'</p></div>').join(""):'<p class="no-comments">No comments yet.</p>';
+    panel.dataset.loaded="true";
+   }catch(error){panel.querySelector("[data-comments-list]").textContent=error.message}
+  }
+  return;
+ }
  if(event.target.closest("[data-close-auth]"))document.querySelector("#auth-modal").hidden=true;
  if(event.target.closest("[data-editor-close]"))closeProfileEditor();
  if(event.target.closest("#remove-profile-picture")){const form=document.querySelector("#profile-editor-form");form.dataset.removePhoto="true";form.elements.profile_picture_file.value="";document.querySelector("#profile-photo-preview").innerHTML=avatar("",form.elements.display_name.value||"TC");}
@@ -251,6 +274,22 @@ document.addEventListener("submit",async event=>{
   showToast("Post published.");
   await loadHome();
  }catch(error){errorBox.textContent=error.message;button.disabled=false;button.textContent="Post"}
+});
+document.addEventListener("submit",async event=>{
+ const form=event.target.closest(".comment-form");
+ if(!form)return;
+ event.preventDefault();
+ if(!await requireSignIn())return;
+ const post=form.closest("[data-post-id]"),button=form.querySelector("button[type=submit]"),error=form.querySelector(".comment-error"),content=form.elements.content.value.trim();
+ if(!content){error.textContent="Write a comment first.";return}
+ button.disabled=true;error.textContent="";
+ try{
+  const response=await fetch("/api/posts/"+post.dataset.postId+"/comments",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({content})});
+  const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not publish comment.");
+  const comment=data.comment,list=post.querySelector("[data-comments-list]"),empty=list.querySelector(".no-comments");if(empty)empty.remove();
+  list.insertAdjacentHTML("beforeend",'<div class="comment"><strong>'+escapeHtml(comment.display_name||comment.username)+'</strong><small>@'+escapeHtml(comment.username)+' · '+escapeHtml(time(comment.created_at))+'</small><p>'+escapeHtml(comment.content)+'</p></div>');
+  const count=post.querySelector("[data-comment-count]");count.textContent=Number(count.textContent||0)+1;form.reset();post.querySelector("[data-comments-panel]").dataset.loaded="true";
+ }catch(error){form.querySelector(".comment-error").textContent=error.message}finally{button.disabled=false}
 });
 document.addEventListener("input",event=>{if(event.target.id==="post-content"){const count=document.querySelector("#post-character-count");if(count)count.textContent=event.target.value.length.toLocaleString()+" / 2,000"}});
 document.addEventListener("submit",async event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();if(await requireSignIn())saveProfileEditor(event.target)}});
