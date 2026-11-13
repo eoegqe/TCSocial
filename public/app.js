@@ -121,32 +121,37 @@ async function loadRecommendations(){
  }catch{aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div><p class="recommendation-empty">Recommendations are temporarily unavailable.</p>'}
 }
 async function loadHome(){
- const isExplore=location.pathname==="/explore";
- pageTitle.textContent=isExplore?"Explore":"Home";
- const aside=document.querySelector("#recommendations");
- if(aside)aside.hidden=isExplore;
+ pageTitle.textContent="Home";
+ const aside=document.querySelector("#recommendations");if(aside)aside.hidden=false;
  try{
-  const data=await api(isExplore?"/api/explore-feed":"/api/feed");
-  const posts=data.posts||[];
-  const signedIn=Boolean(sessionStorage.getItem("tc_social_access_token"));
+  const data=await api("/api/feed"),posts=data.posts||[],signedIn=Boolean(sessionStorage.getItem("tc_social_access_token"));
   let composer="";
-  if(signedIn&&!isExplore){
-   let identities=[];
-   try{identities=(await api("/api/identities")).identities||[]}catch{}
+  if(signedIn){
+   let identities=[];try{identities=(await api("/api/identities")).identities||[]}catch{}
    const options=identities.map(item=>'<option value="'+escapeHtml(item.id)+'">'+escapeHtml(item.display_name+' (@'+item.username+')')+'</option>').join("");
    composer='<button class="compose-toggle" id="compose-toggle" type="button" aria-expanded="false" aria-controls="post-composer">+ Post</button><form id="post-composer" class="post-composer" hidden><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
   }
-  let empty;
-  if(posts.length)empty="";
-  else if(isExplore)empty='<section class="empty-card"><strong>No posts yet.</strong><p>Posts from the community will appear here.</p></section>';
-  else if(!signedIn)empty='<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow creators or managed pages to see their posts here. Visit Explore to discover the community.</p></section>';
-  else empty='<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Check Recommended or Explore to find creators.</p></section>';
+  const empty=posts.length?"":!signedIn?'<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow creators or managed pages to see their posts here. Use Search to find public creators.</p></section>':'<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Use Search to find public creators.</p></section>';
   feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):empty);
-  loadPostReactionStates(feed);
-  if(!isExplore)loadRecommendations();
+  loadPostReactionStates(feed);loadRecommendations();
  }catch(error){renderRequestError(error)}
 }
 
+async function loadSearch(query=""){
+ pageTitle.textContent="Search";
+ const term=String(query||"").trim();
+ feed.innerHTML='<form id="creator-search-form" class="search-form"><input name="q" type="search" maxlength="48" minlength="2" value="'+escapeHtml(term)+'" placeholder="Search creators and pages" aria-label="Search creators and pages" required><button class="post-action" type="submit">Search</button></form><div id="search-results" class="search-results">'+(term?'<div class="loading"><span class="spinner"></span></div>':'<section class="empty-card"><strong>Find creators and pages.</strong><p>Search by name or handle. Private profiles are not listed.</p></section>')+'</div>';
+ const aside=document.querySelector("#recommendations");if(aside)aside.hidden=true;
+ if(term)await runCreatorSearch(term);
+}
+async function runCreatorSearch(term){
+ const target=document.querySelector("#search-results");if(!target)return;
+ target.innerHTML='<div class="loading"><span class="spinner"></span><p>Searching…</p></div>';
+ try{
+  const data=await api("/api/search?q="+encodeURIComponent(term)),results=data.results||[];
+  target.innerHTML=results.length?'<div class="search-result-list">'+results.map(item=>'<a class="search-result" href="/@'+encodeURIComponent(item.username)+'">'+avatar(item.profile_picture,item.display_name||item.username)+'<span class="search-result-info"><strong>'+escapeHtml(item.display_name||item.username)+verifiedMark(item.verified)+'</strong><small>@'+escapeHtml(item.username)+' · '+(item.type==="page"?"Page":"Creator")+' · '+Number(item.follower_count||0).toLocaleString()+' followers</small></span></a>').join("")+'</div>':'<section class="empty-card"><strong>No public results.</strong><p>Try another name or handle.</p></section>';
+ }catch(error){renderRequestError(error)}
+}
 function closeProfileEditor(){const modal=document.querySelector("#profile-editor-modal");if(modal)modal.remove()}
 async function resizeProfilePhoto(file){
  if(!["image/png","image/jpeg","image/webp"].includes(file.type))throw new Error("Choose a PNG, JPEG, or WebP photo.");
@@ -179,11 +184,11 @@ function openProfileEditor(profile){
  const modal=document.createElement("div");
  modal.id="profile-editor-modal";
  modal.className="modal";
- modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">'+(isPage?'PAGE SETTINGS':'CREATOR SETTINGS')+'</span><h2 id="profile-editor-title">'+(isPage?'Edit subaccount':'Edit Creator page')+'</h2><form id="profile-editor-form" data-page-id="'+(isPage?escapeHtml(profile.id):'')+'">'+(isPage?'<label for="edit-handle">Handle</label><input id="edit-handle" name="handle" maxlength="24" minlength="2" pattern="[A-Za-z0-9_]{2,24}" required>':'')+'<label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" required placeholder="Display name">'+(isPage?'':'<label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea>')+'<label for="edit-banner-image">Profile banner</label><input id="edit-banner-image" name="banner_image_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="banner-editor-preview" id="banner-editor-preview"></div><button type="button" class="post-action" id="remove-banner-image">Remove banner</button><p class="editor-hint">The full image remains visible on desktop, tablet, and mobile.</p><label for="edit-profile-picture">Profile photo</label><input id="edit-profile-picture" name="profile_picture_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="profile-photo-preview" id="profile-photo-preview"></div><button type="button" class="post-action" id="remove-profile-picture">Remove photo</button><p class="editor-hint">Choose a PNG, JPEG, or WebP image. It will be resized before upload.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
+ modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">'+(isPage?'PAGE SETTINGS':'CREATOR SETTINGS')+'</span><h2 id="profile-editor-title">'+(isPage?'Edit subaccount':'Edit Creator page')+'</h2><form id="profile-editor-form" data-page-id="'+(isPage?escapeHtml(profile.id):'')+'">'+(isPage?'<label for="edit-handle">Handle</label><input id="edit-handle" name="handle" maxlength="24" minlength="2" pattern="[A-Za-z0-9_]{2,24}" required>':'')+'<label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" required placeholder="Display name">'+(isPage?'':'<label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea>')+(isPage?'':'<label class="privacy-toggle"><input type="checkbox" name="is_private"> Private profile <span>Your profile and posts are visible only to you and your followers.</span></label>')+'<label for="edit-banner-image">Profile banner</label><input id="edit-banner-image" name="banner_image_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="banner-editor-preview" id="banner-editor-preview"></div><button type="button" class="post-action" id="remove-banner-image">Remove banner</button><p class="editor-hint">The full image remains visible on desktop, tablet, and mobile.</p><label for="edit-profile-picture">Profile photo</label><input id="edit-profile-picture" name="profile_picture_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="profile-photo-preview" id="profile-photo-preview"></div><button type="button" class="post-action" id="remove-profile-picture">Remove photo</button><p class="editor-hint">Choose a PNG, JPEG, or WebP image. It will be resized before upload.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
  document.body.append(modal);
  modal.querySelector('[name="display_name"]').value=profile.display_name||"";
  if(isPage)modal.querySelector('[name="handle"]').value=profile.username||"";
- else modal.querySelector('[name="bio"]').value=profile.bio||"";
+ else{modal.querySelector('[name="bio"]').value=profile.bio||"";modal.querySelector('[name="is_private"]').checked=profile.is_private!==false;}
  modal.querySelector("#profile-photo-preview").innerHTML=avatar(profile.profile_picture,profile.display_name||profile.username);
  if(profile.banner_image)modal.querySelector("#banner-editor-preview").innerHTML='<img src="'+escapeHtml(safeMediaUrl(profile.banner_image))+'" alt="Current banner preview">';
  modal.querySelector('[name="display_name"]').focus();
@@ -197,7 +202,7 @@ async function saveProfileEditor(form){
   const isPage=Boolean(form.dataset.pageId);
   const values={display_name:form.elements.display_name.value};
   if(isPage){values.handle=form.elements.handle.value.trim();if(values.handle.length<3&&values.handle.toLowerCase()!=="tc")throw new Error("Handles must be at least 3 characters, except the reserved @TC handle.");}
-  else values.bio=form.elements.bio.value;
+  else{values.bio=form.elements.bio.value;values.is_private=form.elements.is_private.checked;}
   const file=form.elements.profile_picture_file.files[0];
   if(file)values.profile_picture=await resizeProfilePhoto(file);
   const bannerFile=form.elements.banner_image_file.files[0];if(bannerFile)values.banner_image=await resizeBannerImage(bannerFile);
@@ -340,6 +345,7 @@ document.addEventListener("submit",async event=>{
  }catch(error){errorBox.textContent=error.message;button.disabled=false;button.textContent="Post"}
 });
 document.addEventListener("submit",async event=>{
+ if(event.target.id==="creator-search-form"){event.preventDefault();const query=event.target.elements.q.value.trim();history.replaceState({},"","/search?q="+encodeURIComponent(query));runCreatorSearch(query);return}
  const form=event.target.closest(".comment-form");
  if(!form)return;
  event.preventDefault();
@@ -360,4 +366,4 @@ document.addEventListener("submit",async event=>{if(event.target.id==="profile-e
 document.addEventListener("change",event=>{if(event.target.name==="profile_picture_file"){const form=event.target.form;if(form)form.dataset.removePhoto="false";const file=event.target.files?.[0];if(file){const preview=document.querySelector("#profile-photo-preview");if(preview)preview.textContent=file.name}}});
 document.addEventListener("keydown",event=>{if(event.key==="Escape"){document.querySelector("#auth-modal").hidden=true;closeProfileEditor()}});
 if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
-else{let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match){const recommendations=document.querySelector("#recommendations");if(recommendations)recommendations.hidden=true;restoreSignIn().then(()=>loadProfile(match[1]))}else{restoreSignIn().finally(()=>loadHome())}}
+else{let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match){const recommendations=document.querySelector("#recommendations");if(recommendations)recommendations.hidden=true;restoreSignIn().then(()=>loadProfile(match[1]))}else if(decodedPath==="/search"){restoreSignIn().finally(()=>loadSearch(new URLSearchParams(location.search).get("q")||""))}else if(decodedPath==="/explore"){location.replace("/search")}else{restoreSignIn().finally(()=>loadHome())}}
