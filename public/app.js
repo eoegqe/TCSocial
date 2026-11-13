@@ -27,7 +27,8 @@ async function updateSignInState(user){
  }
  const username=String(user.preferred_username);
  let picture=user.picture||user.profile_picture||"";
- try{const profile=await api("/api/profile/"+encodeURIComponent(username));picture=profile.profile?.profile_picture||picture}catch{}
+ let displayName=user.display_name||user.name||username;
+ try{const profile=await api("/api/profile/"+encodeURIComponent(username));picture=profile.profile?.profile_picture||picture;displayName=profile.profile?.display_name||displayName}catch{}
  const safe=safeMediaUrl(picture);
  if(header?.tagName!=="BUTTON"){
   if(header)header.outerHTML='<button class="account-avatar-link" type="button" data-tc-header-account aria-expanded="false" aria-label="Open account menu"></button>';
@@ -39,7 +40,7 @@ async function updateSignInState(user){
  header.title="@"+username;
  header.setAttribute("aria-label","Open account menu for @"+username);
  header.setAttribute("aria-expanded","false");
- header.innerHTML=safe?'<img class="account-avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="account-avatar account-avatar-fallback">'+escapeHtml(initials(user.display_name||user.name||username))+'</span>';
+ header.innerHTML=safe?'<img class="account-avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="account-avatar account-avatar-fallback">'+escapeHtml(initials(displayName))+'</span>';
  if(dropdown){dropdown.querySelector("[data-view-account-page]").href="/@"+encodeURIComponent(username);dropdown.hidden=true}
 }
 async function restoreSignIn(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});if(!response.ok)throw new Error("expired");const user=await response.json();sessionStorage.setItem("tc_social_user",JSON.stringify(user));updateSignInState(user)}catch{sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user");updateSignInState(null)}}
