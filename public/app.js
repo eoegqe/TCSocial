@@ -66,11 +66,10 @@ async function completeSignIn(){const params=new URLSearchParams(location.search
 
 function renderPost(post){
  const name=post.display_name||"@"+post.username;
- const mediaUrl=safeMediaUrl(post.media_url);
- const media=mediaUrl?(/\.(mp4|webm|ogg)(?:$|\?)/i.test(mediaUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(mediaUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(mediaUrl)+'" alt="Post media">'):"";
- return '<article class="post" data-post-id="'+escapeHtml(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+verifiedMark(post.verified,post.verification_type,post.is_tc_staff)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+'<div class="post-actions"><button class="post-action" data-react aria-pressed="false">Like <span data-reaction-count>'+Number(post.reaction_count||0)+'</span></button><button class="post-action" data-comments-toggle aria-expanded="false">Comments <span data-comment-count>'+Number(post.comment_count||0)+'</span></button></div><section class="comments-panel" data-comments-panel hidden><div class="comments-list" data-comments-list></div><form class="comment-form"><textarea name="content" maxlength="1000" rows="2" placeholder="Write a comment…" required></textarea><div><span>1,000 characters max</span><button class="post-action" type="submit">Comment</button></div><p class="comment-error" role="alert"></p></form></section></article>';
-}
-async function loadPostReactionStates(root){
+ let attachments=post.attachments||[];if(typeof attachments==="string"){try{attachments=JSON.parse(attachments)}catch{attachments=[]}}
+ const media=attachments.map(item=>{const url=safeMediaUrl(item.url),label=escapeHtml(item.file_name||"Attachment");if(!url)return "";if(item.media_kind==="image")return '<img class="post-media" loading="lazy" src="'+escapeHtml(url)+'" alt="'+label+'">';if(item.media_kind==="video")return '<video class="post-media" controls preload="metadata" src="'+escapeHtml(url)+'"></video>';return '<a class="post-attachment" href="'+escapeHtml(url)+'" download>'+label+' <span>'+Math.max(1,Math.round(Number(item.file_size||0)/1024))+' KB</span></a>'}).join("");
+ const legacyUrl=safeMediaUrl(post.media_url),legacy=legacyUrl?(/\.(mp4|webm|ogg|mov)(?:$|\?)/i.test(legacyUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(legacyUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(legacyUrl)+'" alt="Post media">'):"";
+ return '<article class="post" data-post-id="'+escapeHtml(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+verifiedMark(post.verified,post.verification_type,post.is_tc_staff)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+legacy+'<div class="post-actions">async function loadPostReactionStates(root){
  const token=sessionStorage.getItem("tc_social_access_token");
  const posts=[...root.querySelectorAll("[data-post-id]")];
  await Promise.all(posts.map(async post=>{
@@ -129,7 +128,7 @@ async function loadHome(){
   if(signedIn){
    let identities=[];try{identities=(await api("/api/identities")).identities||[]}catch{}
    const options=identities.map(item=>'<option value="'+escapeHtml(item.id)+'">'+escapeHtml(item.display_name+' (@'+item.username+')')+'</option>').join("");
-   composer='<button class="compose-toggle" id="compose-toggle" type="button" aria-expanded="false" aria-controls="post-composer">+ Post</button><form id="post-composer" class="post-composer" hidden><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
+   composer='<button class="compose-toggle" id="compose-toggle" type="button" aria-expanded="false" aria-controls="post-composer">+ Post</button><form id="post-composer" class="post-composer" enctype="multipart/form-data" hidden><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?"></textarea><label for="post-attachments">Attach images, videos, or files</label><input id="post-attachments" name="attachments" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,text/csv,application/zip,.docx,.xlsx,.pptx"><p class="attachment-hint">Up to 4 files · 8 MB each · 20 MB total</p><div id="attachment-preview" class="attachment-preview"></div><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
   }
   const empty=posts.length?"":!signedIn?'<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow profiles or managed pages to see their posts here. Use Search to find public profiles.</p></section>':'<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Use Search to find public profiles.</p></section>';
   feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):empty);
@@ -346,19 +345,25 @@ document.addEventListener("click",event=>{
  toggle.textContent=opening?"Cancel":"+ Post";
  if(opening)form.querySelector("#post-content").focus();
 });
+document.addEventListener("change",event=>{
+ if(event.target.id!=="post-attachments")return;
+ const preview=document.querySelector("#attachment-preview");if(!preview)return;
+ const files=[...event.target.files];preview.innerHTML=files.map(file=>'<div class="attachment-preview-item"><span>'+escapeHtml(file.name)+'</span><small>'+Math.max(1,Math.round(file.size/1024))+' KB</small></div>').join("");
+});
 document.addEventListener("submit",async event=>{
  if(event.target.id!=="post-composer")return;
  event.preventDefault();
  if(!await requireSignIn())return;
  const form=event.target,button=form.querySelector('[type="submit"]'),errorBox=form.querySelector("#post-composer-error");
- const content=form.elements.content.value.trim();
- if(!content){errorBox.textContent="Write something before posting.";return}
+ const content=form.elements.content.value.trim(),files=[...form.elements.attachments.files];
+ if(!content&&!files.length){errorBox.textContent="Write something or attach a file.";return}
  button.disabled=true;button.textContent="Posting…";errorBox.textContent="";
  try{
-  const response=await fetch("/api/posts",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},credentials:"same-origin",body:JSON.stringify({content,identity_id:form.elements.identity_id.value||null})});
+  const body=new FormData();body.set("content",content);body.set("identity_id",form.elements.identity_id.value||"");for(const file of files)body.append("attachments",file);
+  const response=await fetch("/api/posts",{method:"POST",headers:{accept:"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},credentials:"same-origin",body});
   const data=await response.json().catch(()=>({}));
   if(!response.ok){
-   const messages={unauthorized:"Your TC sign-in has expired. Please sign in again.",empty_post:"Write something before posting.",post_too_long:"Posts must be 2,000 characters or fewer.",identity_forbidden:"You do not have permission to post as that page.",invalid_identity:"Choose a valid posting identity.",social_account_required:"Your TC account needs an active TC Social profile before posting."};
+   const messages={unauthorized:"Your TC sign-in has expired. Please sign in again.",empty_post:"Write something or attach a file.",post_too_long:"Posts must be 2,000 characters or fewer.",identity_forbidden:"You do not have permission to post as that page.",invalid_identity:"Choose a valid posting identity.",social_account_required:"Your TC account needs an active TC Social profile before posting.",too_many_attachments:"Attach up to 4 files per post.",file_too_large:"Each attachment must be 8 MB or smaller.",attachments_too_large:"All attachments together must be 20 MB or smaller.",unsupported_file:"That file type is not supported."};
    throw new Error(messages[data.error]||data.message||"Your post could not be published. Please try again.");
   }
   showToast("Post published.");
