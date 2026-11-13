@@ -67,9 +67,21 @@ async function completeSignIn(){const params=new URLSearchParams(location.search
 function renderPost(post){
  const name=post.display_name||"@"+post.username;
  let attachments=post.attachments||[];if(typeof attachments==="string"){try{attachments=JSON.parse(attachments)}catch{attachments=[]}}
- const media=attachments.map(item=>{const url=safeMediaUrl(item.url),label=escapeHtml(item.file_name||"Attachment");if(!url)return "";if(item.media_kind==="image")return '<img class="post-media" loading="lazy" src="'+escapeHtml(url)+'" alt="'+label+'">';if(item.media_kind==="video")return '<video class="post-media" controls preload="metadata" src="'+escapeHtml(url)+'"></video>';return '<a class="post-attachment" href="'+escapeHtml(url)+'" download>'+label+' <span>'+Math.max(1,Math.round(Number(item.file_size||0)/1024))+' KB</span></a>'}).join("");
+ const media=attachments.map(item=>{const url=safeMediaUrl(item.url),label=escapeHtml(item.file_name||"Attachment");if(!url)return "";if(item.media_kind==="image")return '<img class="post-media" loading="lazy" data-media-url="'+escapeHtml(url)+'" alt="'+label+'">';if(item.media_kind==="video")return '<video class="post-media" controls preload="metadata" data-media-url="'+escapeHtml(url)+'"></video>';return '<a class="post-attachment" href="#" data-media-url="'+escapeHtml(url)+'" download="'+label+'">'+label+' <span>'+Math.max(1,Math.round(Number(item.file_size||0)/1024))+' KB</span></a>'}).join("");
  const legacyUrl=safeMediaUrl(post.media_url),legacy=legacyUrl?(/\.(mp4|webm|ogg|mov)(?:$|\?)/i.test(legacyUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(legacyUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(legacyUrl)+'" alt="Post media">'):"";
- return '<article class="post" data-post-id="'+escapeHtml(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+verifiedMark(post.verified,post.verification_type,post.is_tc_staff)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+legacy+'<div class="post-actions">async function loadPostReactionStates(root){
+ return '<article class="post" data-post-id="'+escapeHtml(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+verifiedMark(post.verified,post.verification_type,post.is_tc_staff)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+legacy+'<div class="post-actions">async function loadPostMedia(root){
+ const token=sessionStorage.getItem("tc_social_access_token");
+ await Promise.all([...root.querySelectorAll("[data-media-url]")].map(async element=>{
+  const url=element.dataset.mediaUrl;if(!url)return;
+  try{
+   const response=await fetch(url,{headers:{accept:"*/*",...(token?{authorization:"Bearer "+token}:{})},credentials:"same-origin"});
+   if(!response.ok)throw new Error("Attachment unavailable");
+   const objectUrl=URL.createObjectURL(await response.blob());
+   if(element.tagName==="A")element.href=objectUrl;else element.src=objectUrl;
+  }catch{element.hidden=true}
+ }));
+}
+async function loadPostReactionStates(root){
  const token=sessionStorage.getItem("tc_social_access_token");
  const posts=[...root.querySelectorAll("[data-post-id]")];
  await Promise.all(posts.map(async post=>{
@@ -132,7 +144,7 @@ async function loadHome(){
   }
   const empty=posts.length?"":!signedIn?'<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow profiles or managed pages to see their posts here. Use Search to find public profiles.</p></section>':'<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Use Search to find public profiles.</p></section>';
   feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):empty);
-  loadPostReactionStates(feed);loadRecommendations();
+  loadPostMedia(feed);loadPostReactionStates(feed);loadRecommendations();
  }catch(error){renderRequestError(error)}
 }
 
@@ -243,7 +255,7 @@ async function loadProfile(username){
   const posts=await api("/api/profile/"+encodeURIComponent(username)+"/posts");
   const target=document.querySelector("#profile-posts");
   target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This profile has not posted yet.</section>';
-  loadPostReactionStates(target);
+  loadPostMedia(target);loadPostReactionStates(target);
  }catch(error){renderRequestError(error)}
 }
 document.addEventListener("click",async event=>{
