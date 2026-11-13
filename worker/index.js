@@ -123,21 +123,31 @@ export default {
       const authorization=request.headers.get("authorization")||"";
       const match=authorization.match(/^Bearer\s+(.+)$/i);
       if(!match)return json({error:"unauthorized"},401);
+      const storedKeys=[];
       try{
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
         if(!identityResponse.ok)return json({error:"unauthorized"},401);
         const identity=await identityResponse.json();
-        const signedInUsername=String(identity.preferred_username||"").trim();
-        if(!identity.sub||!signedInUsername)return json({error:"unauthorized"},401);
-        const username=signedInUsername;
-        const body=await request.json().catch(()=>null);
-        if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
-        const content=String(body.content||"").trim();
-        if(!content)return json({error:"empty_post",message:"Write something before posting."},400);
-        if(content.length>2000)return json({error:"post_too_long",message:"Posts must be 2,000 characters or fewer."},400);
+        const username=String(identity.preferred_username||"").trim();
+        if(!identity.sub||!username)return json({error:"unauthorized"},401);
         const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),username).first();
         if(!user)return json({error:"social_account_required",message:"Your TC account needs an active TC Social profile before posting."},403);
-        const pageId=body.identity_id==null||body.identity_id===""?null:Number(body.identity_id);
+        const form=await request.formData();
+        const content=String(form.get("content")||"").trim();
+        if(content.length>2000)return json({error:"post_too_long",message:"Posts must be 2,000 characters or fewer."},400);
+        const files=form.getAll("attachments").filter(file=>file&&typeof file==="object"&&typeof file.arrayBuffer==="function"&&file.size>0);
+        if(files.length>4)return json({error:"too_many_attachments",message:"Attach up to 4 files per post."},400);
+        const allowed=new Set(["image/jpeg","image/png","image/webp","image/gif","video/mp4","video/webm","video/quicktime","application/pdf","text/plain","text/csv","application/zip","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/vnd.openxmlformats-officedocument.presentationml.presentation"]);
+        let total=0;
+        for(const file of files){
+          total+=file.size;
+          if(!allowed.has(String(file.type||"").toLowerCase()))return json({error:"unsupported_file",message:"Use JPG, PNG, WebP, GIF, MP4, WebM, MOV, PDF, TXT, CSV, ZIP, DOCX, XLSX, or PPTX files."},415);
+          if(file.size>8*1024*1024)return json({error:"file_too_large",message:"Each attachment must be 8 MB or smaller."},413);
+        }
+        if(total>20*1024*1024)return json({error:"attachments_too_large",message:"All attachments together must be 20 MB or smaller."},413);
+        if(!content&&!files.length)return json({error:"empty_post",message:"Write something or attach a file."},400);
+        const pageValue=form.get("identity_id");
+        const pageId=pageValue==null||pageValue===""?null:Number(pageValue);
         if(pageId!==null){
           if(!Number.isSafeInteger(pageId)||pageId<1)return json({error:"invalid_identity"},400);
           const manager=await env.TC.prepare("SELECT p.id FROM social_pages p JOIN social_page_managers m ON m.page_id=p.id WHERE p.id=? AND m.user_id=? AND p.status='active'").bind(pageId,user.id).first();
@@ -145,12 +155,48 @@ export default {
         }
         const createdAt=new Date().toISOString();
         const result=await env.TC.prepare("INSERT INTO social_posts (user_id,author_page_id,content,media_url,created_at) VALUES (?,?,?,NULL,?)").bind(user.id,pageId,content,createdAt).run();
-        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,COALESCE(sp.verified,u.verified,0) AS verified,COALESCE(sp.verification_type,u.verification_type,'account') AS verification_type,COALESCE(sp.is_tc_staff,u.is_tc_staff,0) AS is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.id=? LIMIT 1").bind(result.meta?.last_row_id).first();
+        const postId=Number(result.meta?.last_row_id);
+        for(const file of files){
+          const mime=String(file.type).toLowerCase();
+          const kind=mime.startsWith("image/")?"image":mime.startsWith("video/")?"video":"file";
+          const originalName=String(file.name||"attachment").replace(/[\x00-\x1f\x7f\\/]/g,"_").slice(0,180)||"attachment";
+          const key="posts/"+postId+"/"+crypto.randomUUID();
+          await env.POST_MEDIA.put(key,await file.arrayBuffer(),{metadata:{contentType:mime,fileName:originalName,kind}});
+          storedKeys.push(key);
+          await env.TC.prepare("INSERT INTO social_post_media (post_id,storage_key,file_name,mime_type,media_kind,file_size,created_at) VALUES (?,?,?,?,?,?,?)").bind(postId,key,originalName,mime,kind,file.size,createdAt).run();
+        }
+        const post=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,"+mediaSelect+"COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,COALESCE(sp.verified,u.verified,0) AS verified,COALESCE(sp.verification_type,u.verification_type,'account') AS verification_type,COALESCE(sp.is_tc_staff,u.is_tc_staff,0) AS is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.id=? LIMIT 1").bind(postId).first();
         return json({post:post?{...post,profile_picture:publicPicture(post.profile_picture,post.username)}:null},201);
       }catch(error){
+        for(const key of storedKeys){try{await env.POST_MEDIA.delete(key)}catch{}}
         console.error("TC Social post creation failed",String(error?.message||error));
         return json({error:"internal_error"},500);
       }
+    }
+    if(url.pathname.startsWith("/api/media/")&&request.method==="GET"){
+      const mediaId=Number(url.pathname.slice("/api/media/".length));
+      if(!Number.isSafeInteger(mediaId)||mediaId<1)return notFound();
+      try{
+        const media=await env.TC.prepare("SELECT m.storage_key,m.file_name,m.mime_type,m.media_kind,m.post_id,p.user_id,p.author_page_id,u.is_private FROM social_post_media m JOIN social_posts p ON p.id=m.post_id JOIN users u ON u.id=p.user_id WHERE m.id=? AND p.deleted_at IS NULL").bind(mediaId).first();
+        if(!media)return notFound();
+        if(media.is_private&&!media.author_page_id){
+          const auth=(request.headers.get("authorization")||"").match(/^Bearer\s+(.+)$/i);
+          let viewerId=null;
+          if(auth){
+            const check=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+auth[1],accept:"application/json"}});
+            if(check.ok){const info=await check.json();viewerId=Number(info.sub)||null}
+          }
+          if(viewerId!==Number(media.user_id)){
+            const follows=viewerId?await env.TC.prepare("SELECT 1 FROM social_follows WHERE follower_id=? AND followed_id=?").bind(viewerId,media.user_id).first():null;
+            if(!follows)return json({error:"forbidden"},403);
+          }
+        }
+        const object=await env.POST_MEDIA.getWithMetadata(media.storage_key,{type:"arrayBuffer"});
+        if(!object?.value)return notFound();
+        const safeName=String(media.file_name||"attachment").replace(/["\\\r\n]/g,"_");
+        const inline=media.media_kind==="image"||media.media_kind==="video";
+        return new Response(object.value,{headers:{"content-type":media.mime_type,"content-length":String(media.file_size),"content-disposition":(inline?"inline":"attachment")+"; filename*=UTF-8''"+encodeURIComponent(safeName),"cache-control":"private, no-store","x-content-type-options":"nosniff","content-security-policy":"default-src 'none'; sandbox"}});
+      }catch(error){console.error("TC Social media read failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
     if(url.pathname.startsWith("/api/follow/")&&(request.method==="GET"||request.method==="POST"||request.method==="DELETE")){
       const targetName=decodeURIComponent(url.pathname.slice("/api/follow/".length)).replace(/^@/,"");
@@ -390,7 +436,7 @@ export default {
             const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0),is_online:Boolean(user.last_heartbeat_at&&Date.now()-Date.parse(user.last_heartbeat_at)<90000)}});
           }
           if(parts.length===4&&parts[3]==="posts"){
-            const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture,sp.verified,sp.verification_type,sp.is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
+            const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE((SELECT json_group_array(json_object('id',m.id,'url','/api/media/'||m.id,'file_name',m.file_name,'mime_type',m.mime_type,'media_kind',m.media_kind,'file_size',m.file_size)) FROM social_post_media m WHERE m.post_id=p.id),'[]') AS attachments,sp.handle AS username,sp.display_name,sp.profile_picture,sp.verified,sp.verification_type,sp.is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
             return json({posts:publicPosts(pagePosts.results)});
           }
           return notFound();
@@ -411,7 +457,7 @@ export default {
         }
         if(parts.length===3){let canVerify=false,canEdit=false;const auth=request.headers.get("authorization")||"",tokenMatch=auth.match(/^Bearer\s+(.+)$/i);if(tokenMatch){const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});if(identityResponse.ok){const identity=await identityResponse.json();canVerify=Number(identity.sub)===1;canEdit=canVerify||Number(identity.sub)===user.id;}}const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_follows WHERE followed_id=?").bind(user.id).first();return json({profile:{...safeUser(user),is_page:false,can_verify:canVerify,can_edit:canEdit,follower_count:Number(followers?.count||0)}});}
         if(parts.length===4&&parts[3]==="posts"){
-          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.author_page_id IS NULL AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
+          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE((SELECT json_group_array(json_object('id',m.id,'url','/api/media/'||m.id,'file_name',m.file_name,'mime_type',m.mime_type,'media_kind',m.media_kind,'file_size',m.file_size)) FROM social_post_media m WHERE m.post_id=p.id),'[]') AS attachments,u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.author_page_id IS NULL AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
           return json({posts:publicPosts(result.results)});
         }
         return notFound();
@@ -427,7 +473,7 @@ export default {
         const identity=await identityResponse.json();
         const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
         if(!user)return json({posts:[]});
-        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,COALESCE(sp.verified,u.verified,0) AS verified,COALESCE(sp.verification_type,u.verification_type,'account') AS verification_type,COALESCE(sp.is_tc_staff,u.is_tc_staff,0) AS is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.deleted_at IS NULL AND u.status='active' AND ((p.author_page_id IS NULL AND EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=? AND f.followed_id=p.user_id)) OR (p.author_page_id IS NOT NULL AND EXISTS(SELECT 1 FROM social_page_follows pf WHERE pf.follower_id=? AND pf.page_id=p.author_page_id))) ORDER BY p.created_at DESC LIMIT 50").bind(user.id,user.id).all();
+        const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE((SELECT json_group_array(json_object('id',m.id,'url','/api/media/'||m.id,'file_name',m.file_name,'mime_type',m.mime_type,'media_kind',m.media_kind,'file_size',m.file_size)) FROM social_post_media m WHERE m.post_id=p.id),'[]') AS attachments,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture,COALESCE(sp.verified,u.verified,0) AS verified,COALESCE(sp.verification_type,u.verification_type,'account') AS verification_type,COALESCE(sp.is_tc_staff,u.is_tc_staff,0) AS is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.deleted_at IS NULL AND u.status='active' AND ((p.author_page_id IS NULL AND EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=? AND f.followed_id=p.user_id)) OR (p.author_page_id IS NOT NULL AND EXISTS(SELECT 1 FROM social_page_follows pf WHERE pf.follower_id=? AND pf.page_id=p.author_page_id))) ORDER BY p.created_at DESC LIMIT 50").bind(user.id,user.id).all();
         return json({posts:publicPosts(result.results)});
       }catch(error){console.error("TC Social followed feed failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
