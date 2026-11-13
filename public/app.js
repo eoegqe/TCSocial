@@ -269,8 +269,8 @@ document.addEventListener("click",async event=>{
    if(selected===null){verify.disabled=false;return}
    const types={"1":"account","2":"business","3":"group","4":"ai"};
    const verificationType=types[selected];
-   const staffAction=selected==="4";
-   const remove=selected==="5";
+   const staffAction=selected==="6";
+   const remove=selected==="7";
    if(!verificationType&&!staffAction&&!remove)throw new Error("Invalid verification action.");
    const response=await fetch("/api/verification",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({type:verify.dataset.verifyType,username:verify.dataset.verifyName,verified:remove?false:!staffAction,verification_type:verificationType||"account",staff:staffAction?verify.dataset.staff!=="true":undefined})});
    const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not update verification.");
