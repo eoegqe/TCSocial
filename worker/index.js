@@ -204,7 +204,7 @@ export default {
                 if(identityResponse.ok){
                   const identity=await identityResponse.json();
                   const manager=await env.TC.prepare("SELECT role FROM social_page_managers WHERE page_id=? AND user_id=?").bind(page.id,Number(identity.sub)).first();
-                  canManage=Boolean(manager);
+                  canManage=Boolean(manager&&["owner","admin"].includes(manager.role));
                 }
               }catch{}
             }
