@@ -298,7 +298,7 @@ export default {
           try{imageUrl=new URL(picture)}catch{return json({error:"invalid_profile_picture_url",message:"Profile picture must be a valid HTTPS image URL."},400)}
           if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url",message:"Profile picture must use HTTPS."},400);
         }
-        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,profile_picture=COALESCE(?,profile_picture),banner_image=COALESCE(?,banner_image) WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,picture===undefined?null:picture,banner===undefined?null:banner,username).run();
+        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,profile_picture=CASE WHEN ?=1 THEN ? ELSE profile_picture END,banner_image=CASE WHEN ?=1 THEN ? ELSE banner_image END WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,Object.prototype.hasOwnProperty.call(body,"profile_picture")?1:0,picture,Object.prototype.hasOwnProperty.call(body,"banner_image")?1:0,banner,username).run();
         if(!result.meta?.changes)return notFound();
         const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture,banner_image,verified FROM users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
         return json({profile:safeUser(updated)});
