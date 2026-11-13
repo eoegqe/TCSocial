@@ -121,10 +121,19 @@ export default {
       if(!username||username.length>64)return json({error:"invalid_username"},400);
       try{
         const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
-        if(!user)return notFound();
+        if(!user){
+          const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+          if(!page)return notFound();
+          if(parts.length===3)return json({profile:{username:page.handle,display_name:page.display_name,bio:null,profile_picture:page.profile_picture,is_page:true}});
+          if(parts.length===4&&parts[3]==="posts"){
+            const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
+            return json({posts:publicPosts(pagePosts.results)});
+          }
+          return notFound();
+        }
         if(parts.length===3)return json({profile:safeUser(user)});
         if(parts.length===4&&parts[3]==="posts"){
-          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE(sp.handle,u.username) AS username,COALESCE(sp.display_name,u.display_name) AS display_name,COALESCE(sp.profile_picture,u.profile_picture) AS profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id LEFT JOIN social_pages sp ON sp.id=p.author_page_id WHERE (p.user_id=? OR p.author_page_id IN (SELECT id FROM social_pages WHERE handle=? COLLATE NOCASE)) AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id,username).all();
+          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.author_page_id IS NULL AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
           return json({posts:publicPosts(result.results)});
         }
         return notFound();
