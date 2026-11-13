@@ -4,7 +4,7 @@ document.querySelector("#year").textContent=new Date().getFullYear();
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 const initials=value=>String(value||"TC").trim().slice(0,1).toUpperCase();
 const safeMediaUrl=value=>{if(typeof value!=="string"||!value.trim())return "";try{const url=new URL(value.trim(),location.origin);return ["https:","http:"].includes(url.protocol)?url.href:""}catch{return ""}};
-const verifiedMark=(verified,type="account")=>{if(!verified)return "";const marks={account:{symbol:"✓",title:"Verified account"},business:{symbol:"💼",title:"Verified business"},group:{symbol:"👥✓",title:"Verified group"}};const mark=marks[type]||marks.account;return '<span class="verified-mark verified-'+type+'" title="'+mark.title+'" aria-label="'+mark.title+'">'+mark.symbol+'</span>'};
+const verifiedMark=(verified,type="account")=>{if(!verified)return "";const marks={account:{symbol:"✓",title:"Verified account"},business:{symbol:"💼",title:"Verified business"},group:{symbol:"👥✓",title:"Verified group"},staff:{symbol:"🛠️",title:"TC staff"}};const mark=marks[type]||marks.account;return '<span class="verified-mark verified-'+type+'" title="'+mark.title+'" aria-label="'+mark.title+'">'+mark.symbol+'</span>'};
 const avatar=(url,name)=>{const safe=safeMediaUrl(url);return safe?'<img class="avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="avatar">'+escapeHtml(initials(name))+'</span>'};
 const time=value=>{const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})};
 async function api(path){const token=sessionStorage.getItem("tc_social_access_token");const response=await fetch(path,{headers:{accept:"application/json",...(token?{authorization:"Bearer "+token}:{})},credentials:"same-origin"});const data=await response.json().catch(()=>({}));if(!response.ok){const error=new Error("Request failed");error.status=response.status;error.code=data.error;error.confidence=data.confidence;throw error}return data}
@@ -254,12 +254,12 @@ document.addEventListener("click",async event=>{
   verify.disabled=true;
   try{
    const current=verify.dataset.verified==="true";
-   const selected=window.prompt("Choose verification type:\\n1. Verified account\\n2. Verified business\\n3. Verified group"+(current?"\\n4. Remove verification":""),current?"": "1");
+   const selected=window.prompt("Choose verification type:\\n1. Verified account\\n2. Verified business\\n3. Verified group\\n4. TC staff"+(current?"\\n5. Remove verification":""),current?"": "1");
    if(selected===null){verify.disabled=false;return}
-   const types={"1":"account","2":"business","3":"group"};
+   const types={"1":"account","2":"business","3":"group","4":"staff"};
    const verificationType=types[selected];
-   const remove=current&&selected==="4";
-   if(!verificationType&&!remove)throw new Error("Choose 1, 2, or 3"+(current?", or 4 to remove verification.":"."));
+   const remove=current&&selected==="5";
+   if(!verificationType&&!remove)throw new Error("Choose 1, 2, 3, or 4"+(current?", or 5 to remove verification.":"."));
    const response=await fetch("/api/verification",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({type:verify.dataset.verifyType,username:verify.dataset.verifyName,verified:!remove,verification_type:verificationType||"account"})});
    const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not update verification.");
    showToast(remove?"Verification removed.":"Verification updated.");loadProfile(verify.dataset.verifyName);
