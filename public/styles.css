@@ -100,3 +100,19 @@ h1,h2,h3,p{margin-top:0}
 .comment-form>div{display:flex;align-items:center;justify-content:space-between}.comment-form>div span{font-size:9px;color:#777}
 .comment-error{font-size:10px;color:#ef9b9b;margin:0;min-height:0}
 .post-action.is-active{background:#eee;color:#111;border-color:#eee}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:22px;align-items:start}
+.main-column{width:100%;min-width:0}
+.recommendations-column{position:sticky;top:90px;align-self:start;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:17px;min-width:0}
+.recommendations-column[hidden]{display:none}
+.recommendation-heading h3{font:600 17px 'Space Grotesk',sans-serif;margin:7px 0 14px}
+.recommendation-list{display:grid;gap:13px}
+.recommendation-item{display:flex;align-items:center;gap:10px;min-width:0}
+.recommendation-item .avatar{width:36px;height:36px;font-size:12px}
+.recommendation-info{display:grid;gap:3px;min-width:0}
+.recommendation-info strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recommendation-info small{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recommendation-empty{font-size:11px;line-height:1.6;color:var(--muted);margin:0}
+.follower-count{display:block;color:var(--muted);font-size:10px;margin-top:6px}
+@media(max-width:850px){.layout{grid-template-columns:minmax(0,1fr) 230px;gap:14px}}
+@media(max-width:650px){.layout{display:block}.recommendations-column{position:static;margin-top:18px}.recommendation-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
