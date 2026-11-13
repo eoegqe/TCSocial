@@ -73,3 +73,13 @@ h1,h2,h3,p{margin-top:0}
 .profile-editor-card input[type=file]{padding:9px;background:#111;font-size:11px}
 .profile-photo-preview{display:flex;align-items:center;gap:10px;min-height:52px}
 .profile-photo-preview .avatar{width:52px;height:52px}
+
+.post-composer{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:17px;margin-bottom:12px;display:grid;gap:10px}
+.post-composer label{font:600 14px "Space Grotesk",sans-serif}
+.post-composer textarea{width:100%;resize:vertical;min-height:76px;border:1px solid #333;border-radius:9px;background:#0b0b0b;color:#f4f4f4;padding:12px;font:13px/1.6 "DM Sans",sans-serif;outline:none}
+.post-composer textarea:focus{border-color:#777}
+.composer-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.composer-footer span{font-size:10px;color:#777}
+.publish-post{border:1px solid #eee;background:#eee;color:#111;border-radius:7px;padding:9px 17px;font:700 11px "DM Sans",sans-serif;cursor:pointer}
+.publish-post:disabled{opacity:.55;cursor:wait}
+.composer-error{font-size:11px;color:#ef9b9b;margin:0;min-height:0}
