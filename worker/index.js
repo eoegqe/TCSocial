@@ -10,7 +10,15 @@ export default {
     if(url.pathname==="/app.js"&&request.method==="GET"){
       const asset=await env.ASSETS.fetch(request);
       const source=await asset.text();
-      const repaired=source.replaceAll("\\n","\n").replaceAll("\\\\","\\");
+      let repaired=source.replaceAll("\\n","\n").replaceAll("\\\\","\\");
+      if(!repaired.includes("async function requireSignIn()")){
+        const authHelper=`async function requireSignIn(){\n const token=sessionStorage.getItem("tc_social_access_token");\n if(token){try{const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});const user=await response.json().catch(()=>null);if(response.ok&&user?.sub&&user?.preferred_username){sessionStorage.setItem("tc_social_user",JSON.stringify(user));await updateSignInState(user);return true}}catch{}sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user")}\n await updateSignInState(null);document.querySelector("#auth-modal").hidden=false;return false;\n}\n`;
+        repaired=repaired.replace("async function restoreSignIn(){",authHelper+"async function restoreSignIn(){");
+        repaired=repaired.replace('if(!sessionStorage.getItem("tc_social_access_token")){document.querySelector("#auth-modal").hidden=false;return}',"if(!await requireSignIn())return");
+        repaired=repaired.replace('if(action){document.querySelector("#auth-modal").hidden=false;return}', 'if(action){if(!await requireSignIn())return;showToast(action.dataset.authAction==="react"?"Reactions are not available yet.":"Comments are not available yet.");return}');
+        repaired=repaired.replace('if(event.target.id!=="post-composer")return;\\n event.preventDefault();', 'if(event.target.id!=="post-composer")return;\\n event.preventDefault();\\n if(!await requireSignIn())return;');
+        repaired=repaired.replace('document.addEventListener("submit",event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();saveProfileEditor(event.target)}});', 'document.addEventListener("submit",async event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();if(await requireSignIn())saveProfileEditor(event.target)}});');
+      }
       return new Response(repaired,{status:asset.status,headers:asset.headers});
     }
     if(url.pathname==="/api/auth/config"&&request.method==="GET")return json({client_id:env.TC_SOCIAL_CLIENT_ID||null,redirect_uri:new URL("/auth/callback",url.origin).toString()});
