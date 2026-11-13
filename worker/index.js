@@ -28,7 +28,7 @@ export default {
     }
     if(url.pathname==="/api/identities"&&request.method==="GET"){
       const authorization=request.headers.get("authorization")||"";
-      const match=authorization.match(/^Bearer\\s+(.+)$/i);
+      const match=authorization.match(/^Bearer\s+(.+)$/i);
       if(!match)return json({error:"unauthorized"},401);
       try{
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
