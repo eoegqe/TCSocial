@@ -3,7 +3,7 @@ const pageTitle=document.querySelector("#page-title");
 document.querySelector("#year").textContent=new Date().getFullYear();
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 const initials=value=>String(value||"TC").trim().slice(0,1).toUpperCase();
-const safeMediaUrl=value=>{try{const url=new URL(value,location.origin);return ["https:","http:"].includes(url.protocol)?url.href:""}catch{return ""}};
+const safeMediaUrl=value=>{if(typeof value!=="string"||!value.trim())return "";try{const url=new URL(value.trim(),location.origin);return ["https:","http:"].includes(url.protocol)?url.href:""}catch{return ""}};
 const avatar=(url,name)=>{const safe=safeMediaUrl(url);return safe?'<img class="avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="avatar">'+escapeHtml(initials(name))+'</span>'};
 const time=value=>{const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})};
 async function api(path){const token=sessionStorage.getItem("tc_social_access_token");const response=await fetch(path,{headers:{accept:"application/json",...(token?{authorization:"Bearer "+token}:{})},credentials:"same-origin"});const data=await response.json().catch(()=>({}));if(!response.ok){const error=new Error("Request failed");error.status=response.status;error.code=data.error;error.confidence=data.confidence;throw error}return data}
@@ -39,7 +39,7 @@ async function updateSignInState(user){
  header.title="@"+username;
  header.setAttribute("aria-label","Open account menu for @"+username);
  header.setAttribute("aria-expanded","false");
- header.innerHTML=safe?'<img class="account-avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="account-avatar account-avatar-fallback">'+escapeHtml(initials(username))+'</span>';
+ header.innerHTML=safe?'<img class="account-avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="account-avatar account-avatar-fallback">'+escapeHtml(initials(user.display_name||user.name||username))+'</span>';
  if(dropdown){dropdown.querySelector("[data-view-account-page]").href="/@"+encodeURIComponent(username);dropdown.hidden=true}
 }
 async function restoreSignIn(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});if(!response.ok)throw new Error("expired");const user=await response.json();sessionStorage.setItem("tc_social_user",JSON.stringify(user));updateSignInState(user)}catch{sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user");updateSignInState(null)}}
@@ -120,7 +120,7 @@ function openProfileEditor(profile){
  document.body.append(modal);
  modal.querySelector('[name="display_name"]').value=profile.display_name||"";
  modal.querySelector('[name="bio"]').value=profile.bio||"";
- modal.querySelector("#profile-photo-preview").innerHTML=profile.profile_picture?avatar(profile.profile_picture,profile.display_name||profile.username):"<span class=\"avatar\">"+escapeHtml(initials(profile.username))+"</span>";
+ modal.querySelector("#profile-photo-preview").innerHTML=avatar(profile.profile_picture,profile.display_name||profile.username);
  modal.querySelector('[name="display_name"]').focus();
 }
 async function saveProfileEditor(form){
