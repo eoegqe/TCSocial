@@ -80,7 +80,7 @@ export default {
         const target=await env.TC.prepare("SELECT id FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(targetName).first();
         if(!target)return notFound();
         const authorization=request.headers.get("authorization")||"";
-        const match=authorization.match(/^Bearer\\s+(.+)$/i);
+        const match=authorization.match(/^Bearer\s+(.+)$/i);
         if(!match){
           if(request.method==="GET")return json({following:false});
           return json({error:"unauthorized"},401);
@@ -104,7 +104,7 @@ export default {
       const pageId=Number(url.pathname.slice("/api/pages/".length));
       if(!Number.isSafeInteger(pageId)||pageId<1)return json({error:"invalid_page"},400);
       const authorization=request.headers.get("authorization")||"";
-      const match=authorization.match(/^Bearer\\s+(.+)$/i);
+      const match=authorization.match(/^Bearer\s+(.+)$/i);
       if(!match)return json({error:"unauthorized"},401);
       try{
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
@@ -123,7 +123,7 @@ export default {
         if(!/^[A-Za-z0-9_]{3,24}$/.test(handle)&&handle.toLowerCase()!=="tc")return json({error:"invalid_handle",message:"Handles must be 3–24 letters, numbers, or underscores. @TC is reserved."},400);
         let picture=Object.prototype.hasOwnProperty.call(body,"profile_picture")?(body.profile_picture==null||String(body.profile_picture).trim()===""?null:String(body.profile_picture).trim()):page.profile_picture;
         if(picture&&picture.startsWith("data:")){
-          const uploaded=picture.match(/^data:(image\\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
+          const uploaded=picture.match(/^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
           if(!uploaded)return json({error:"invalid_image"},400);
           let decoded;try{decoded=atob(uploaded[2])}catch{return json({error:"invalid_image"},400)}
           if(decoded.length>400000)return json({error:"image_too_large"},413);
@@ -197,7 +197,7 @@ export default {
           if(parts.length===3){
             let canManage=false;
             const auth=request.headers.get("authorization")||"";
-            const tokenMatch=auth.match(/^Bearer\\s+(.+)$/i);
+            const tokenMatch=auth.match(/^Bearer\s+(.+)$/i);
             if(tokenMatch){
               try{
                 const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});
