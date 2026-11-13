@@ -131,7 +131,7 @@ async function loadHome(){
    const options=identities.map(item=>'<option value="'+escapeHtml(item.id)+'">'+escapeHtml(item.display_name+' (@'+item.username+')')+'</option>').join("");
    composer='<button class="compose-toggle" id="compose-toggle" type="button" aria-expanded="false" aria-controls="post-composer">+ Post</button><form id="post-composer" class="post-composer" hidden><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
   }
-  const empty=posts.length?"":!signedIn?'<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow creators or managed pages to see their posts here. Use Search to find public profiles.</p></section>':'<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Use Search to find public profiles.</p></section>';
+  const empty=posts.length?"":!signedIn?'<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow profiles or managed pages to see their posts here. Use Search to find public profiles.</p></section>':'<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Use Search to find public profiles.</p></section>';
   feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):empty);
   loadPostReactionStates(feed);loadRecommendations();
  }catch(error){renderRequestError(error)}
@@ -254,7 +254,7 @@ document.addEventListener("click",async event=>{
    const next=verify.dataset.verified!=="true";
    const response=await fetch("/api/verification",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({type:verify.dataset.verifyType,username:verify.dataset.verifyName,verified:next})});
    const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not update verification.");
-   showToast(next?"Creator verified.":"Verification removed.");loadProfile(verify.dataset.verifyName);
+   showToast(next?"Profile verified.":"Verification removed.");loadProfile(verify.dataset.verifyName);
   }catch(error){showToast(error.message);verify.disabled=false}
   return;
  }
