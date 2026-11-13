@@ -43,6 +43,21 @@ async function updateSignInState(user){
  header.innerHTML=safe?'<img class="account-avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="account-avatar account-avatar-fallback">'+escapeHtml(initials(displayName))+'</span>';
  if(dropdown){dropdown.querySelector("[data-view-account-page]").href="/@"+encodeURIComponent(username);dropdown.hidden=true}
 }
+async function requireSignIn(){
+ const token=sessionStorage.getItem("tc_social_access_token");
+ if(token){
+  try{
+   const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});
+   const user=await response.json().catch(()=>null);
+   if(response.ok&&user?.sub&&user?.preferred_username){sessionStorage.setItem("tc_social_user",JSON.stringify(user));await updateSignInState(user);return true}
+  }catch{}
+  sessionStorage.removeItem("tc_social_access_token");
+  sessionStorage.removeItem("tc_social_user");
+ }
+ await updateSignInState(null);
+ document.querySelector("#auth-modal").hidden=false;
+ return false;
+}
 async function restoreSignIn(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});if(!response.ok)throw new Error("expired");const user=await response.json();sessionStorage.setItem("tc_social_user",JSON.stringify(user));updateSignInState(user)}catch{sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user");updateSignInState(null)}}
 function showToast(message){const toast=document.querySelector("#toast");if(!toast)return;toast.textContent=message;toast.classList.add("show");setTimeout(()=>toast.classList.remove("show"),2600)}
 function showAuthError(message){const modal=document.querySelector("#auth-modal");modal.hidden=false;const description=modal.querySelector("p");if(description)description.textContent=message}
@@ -186,7 +201,7 @@ document.addEventListener("click",async event=>{
  if(signIn){event.preventDefault();beginSignIn();return}
  const follow=event.target.closest("[data-follow]");
  if(follow){
-  if(!sessionStorage.getItem("tc_social_access_token")){document.querySelector("#auth-modal").hidden=false;return}
+  if(!await requireSignIn())return;
   const username=follow.dataset.follow;
   const wasFollowing=follow.getAttribute("aria-pressed")==="true";
   follow.disabled=true;
@@ -202,7 +217,7 @@ document.addEventListener("click",async event=>{
   return;
  }
  const action=event.target.closest("[data-auth-action]");
- if(action){document.querySelector("#auth-modal").hidden=false;return}
+ if(action){if(!await requireSignIn())return;showToast(action.dataset.authAction==="react"?"Reactions are not available yet.":"Comments are not available yet.");return}
  if(event.target.closest("[data-close-auth]"))document.querySelector("#auth-modal").hidden=true;
  if(event.target.closest("[data-editor-close]"))closeProfileEditor();
  if(event.target.closest("#remove-profile-picture")){const form=document.querySelector("#profile-editor-form");form.dataset.removePhoto="true";form.elements.profile_picture_file.value="";document.querySelector("#profile-photo-preview").innerHTML=avatar("",form.elements.display_name.value||"TC");}
@@ -221,6 +236,7 @@ document.addEventListener("click",event=>{
 document.addEventListener("submit",async event=>{
  if(event.target.id!=="post-composer")return;
  event.preventDefault();
+ if(!await requireSignIn())return;
  const form=event.target,button=form.querySelector('[type="submit"]'),errorBox=form.querySelector("#post-composer-error");
  const content=form.elements.content.value.trim();
  if(!content){errorBox.textContent="Write something before posting.";return}
@@ -237,7 +253,7 @@ document.addEventListener("submit",async event=>{
  }catch(error){errorBox.textContent=error.message;button.disabled=false;button.textContent="Post"}
 });
 document.addEventListener("input",event=>{if(event.target.id==="post-content"){const count=document.querySelector("#post-character-count");if(count)count.textContent=event.target.value.length.toLocaleString()+" / 2,000"}});
-document.addEventListener("submit",event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();saveProfileEditor(event.target)}});
+document.addEventListener("submit",async event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();if(await requireSignIn())saveProfileEditor(event.target)}});
 document.addEventListener("change",event=>{if(event.target.name==="profile_picture_file"){const form=event.target.form;if(form)form.dataset.removePhoto="false";const file=event.target.files?.[0];if(file){const preview=document.querySelector("#profile-photo-preview");if(preview)preview.textContent=file.name}}});
 document.addEventListener("keydown",event=>{if(event.key==="Escape"){document.querySelector("#auth-modal").hidden=true;closeProfileEditor()}});
 if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
