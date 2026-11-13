@@ -15,9 +15,9 @@ export default {
       const removeAside=(input,marker)=>{const start=input.indexOf(marker);if(start<0)return input;const end=input.indexOf("</aside>",start);return end<0?input:input.slice(0,start)+input.slice(end+8)};
       html=removeAside(html,'<aside class="side-column">');
       html=removeAside(html,'<aside class="right-column">');
-      html=html.replace("/styles.css?v=20261112-2","/styles.css?v=20261113-social-labels-1");
-      html=html.replace("/styles.css?v=20261113-profiles-admin-1","/styles.css?v=20261113-social-labels-1");
-      html=html.replace("/app.js?v=20261113-profiles-admin-1","/app.js?v=20261113-social-labels-1");
+      html=html.replace("/styles.css?v=20261112-2","/styles.css?v=20261113-social-x-1");
+      html=html.replace("/styles.css?v=20261113-profiles-admin-1","/styles.css?v=20261113-social-x-1");
+      html=html.replace("/app.js?v=20261113-profiles-admin-1","/app.js?v=20261113-social-x-1");
       html=html.replace("</head>",'<style>.layout{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:22px;align-items:start;width:min(1240px,calc(100% - 48px));margin:34px auto}.main-column{width:100%;min-width:0}.recommendations-column{position:sticky;top:90px;align-self:start;background:#111;border:1px solid #262626;border-radius:13px;padding:17px;min-width:0}.recommendations-column[hidden]{display:none}.site-footer{font-size:10px;color:#666;padding:24px 2px;text-align:center}@media(max-width:850px){.layout{grid-template-columns:minmax(0,1fr) 230px;gap:14px}}@media(max-width:650px){.layout{display:block;width:calc(100% - 28px);margin:22px auto}.recommendations-column{position:static;margin-top:18px}}.modal{overflow-y:auto;overscroll-behavior:contain}.profile-editor-card{max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain;min-height:0}.profile-banner{width:100%;height:auto;min-height:0;max-height:none;aspect-ratio:auto;display:block;overflow:visible;background:#080808;border-radius:9px;margin-bottom:20px}.profile-banner img{display:block;width:100%;height:auto;max-height:360px;object-fit:contain;object-position:center}</style></head>');
       return new Response(html,{status:asset.status,headers:asset.headers});
     }
@@ -35,6 +35,9 @@ export default {
         repaired=repaired.replace('if(event.target.id!=="post-composer")return;\\n event.preventDefault();', 'if(event.target.id!=="post-composer")return;\\n event.preventDefault();\\n if(!await requireSignIn())return;');
         repaired=repaired.replace('document.addEventListener("submit",event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();saveProfileEditor(event.target)}});', 'document.addEventListener("submit",async event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();if(await requireSignIn())saveProfileEditor(event.target)}});');
       }
+      repaired=repaired.replaceAll('["youtube","instagram","tiktok","spotify","twitch","website"]','["youtube","instagram","tiktok","spotify","twitch","x","website"]');
+      repaired=repaired.replace('<label for="edit-website">Website</label>','<label for="edit-x">X</label><input id="edit-x" name="social_x" type="url" maxlength="500" placeholder="https://x.com/username"><label for="edit-x-label">X button label</label><input id="edit-x-label" name="social_x_label" maxlength="40" placeholder="e.g. Follow me on X"><label for="edit-website">Website</label>');
+      repaired=repaired.replace('twitch:"Twitch",website:"Website"','twitch:"Twitch",x:"X",website:"Website"');
       return new Response(repaired,{status:asset.status,headers:asset.headers});
     }
     if(url.pathname==="/api/auth/config"&&request.method==="GET")return json({client_id:env.TC_SOCIAL_CLIENT_ID||null,redirect_uri:new URL("/auth/callback",url.origin).toString()});
