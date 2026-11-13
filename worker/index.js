@@ -10,7 +10,7 @@ export default {
     const url=new URL(request.url);
     if(url.pathname==="/api/health"&&request.method==="GET")return json({ok:true,service:"TC Social"});
     if(url.pathname==="/api/presence/heartbeat"&&request.method==="POST"){
-      const authorization=request.headers.get("authorization")||"",match=authorization.match(/^Bearer\\s+(.+)$/i);
+      const authorization=request.headers.get("authorization")||"",match=authorization.match(/^Bearer\s+(.+)$/i);
       if(!match)return json({error:"unauthorized"},401);
       try{
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
