@@ -85,7 +85,13 @@ async function loadHome(){
   const data=await api("/api/feed");
   const posts=data.posts||[];
   const signedIn=Boolean(sessionStorage.getItem("tc_social_access_token"));
-  const composer=signedIn?'<form id="post-composer" class="post-composer"><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>':'';
+  let composer="";
+  if(signedIn){
+   let identities=[];
+   try{identities=(await api("/api/identities")).identities||[]}catch{}
+   const options=identities.map(item=>'<option value="'+escapeHtml(item.id)+'">'+escapeHtml(item.display_name+' (@'+item.username+')')+'</option>').join("");
+   composer='<form id="post-composer" class="post-composer"><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
+  }
   feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>');
  }catch(error){renderRequestError(error)}
 }
@@ -180,10 +186,10 @@ document.addEventListener("submit",async event=>{
  if(!content){errorBox.textContent="Write something before posting.";return}
  button.disabled=true;button.textContent="Posting…";errorBox.textContent="";
  try{
-  const response=await fetch("/api/posts",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},credentials:"same-origin",body:JSON.stringify({content})});
+  const response=await fetch("/api/posts",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},credentials:"same-origin",body:JSON.stringify({content,identity_id:form.elements.identity_id.value||null})});
   const data=await response.json().catch(()=>({}));
   if(!response.ok){
-   const messages={unauthorized:"Your TC sign-in has expired. Please sign in again.",empty_post:"Write something before posting.",post_too_long:"Posts must be 2,000 characters or fewer.",social_account_required:"Your TC account needs an active TC Social profile before posting."};
+   const messages={unauthorized:"Your TC sign-in has expired. Please sign in again.",empty_post:"Write something before posting.",post_too_long:"Posts must be 2,000 characters or fewer.",identity_forbidden:"You do not have permission to post as that page.",invalid_identity:"Choose a valid posting identity.",social_account_required:"Your TC account needs an active TC Social profile before posting."};
    throw new Error(messages[data.error]||data.message||"Your post could not be published. Please try again.");
   }
   showToast("Post published.");
