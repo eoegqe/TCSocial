@@ -117,7 +117,7 @@ async function loadRecommendations(){
  try{
   const data=await api("/api/recommendations");
   const items=data.recommendations||[];
-  aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div>'+(items.length?'<div class="recommendation-list">'+items.map(item=>'<a class="recommendation-item" href="/@'+encodeURIComponent(item.username)+'">'+avatar(item.profile_picture,item.display_name||item.username)+'<span class="recommendation-info"><strong>'+escapeHtml(item.display_name||item.username)+verifiedMark(item.verified)+'</strong><small>@'+escapeHtml(item.username)+' · '+Number(item.follower_count||0).toLocaleString()+' followers</small></span></a>').join("")+'</div>':'<p class="recommendation-empty">No creators to recommend yet.</p>');
+  aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div>'+(items.length?'<div class="recommendation-list">'+items.map(item=>'<a class="recommendation-item" href="/@'+encodeURIComponent(item.username)+'">'+avatar(item.profile_picture,item.display_name||item.username)+'<span class="recommendation-info"><strong>'+escapeHtml(item.display_name||item.username)+verifiedMark(item.verified)+'</strong><small>@'+escapeHtml(item.username)+' · '+Number(item.follower_count||0).toLocaleString()+' followers</small></span></a>').join("")+'</div>':'<p class="recommendation-empty">No profiles to recommend yet.</p>');
  }catch{aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div><p class="recommendation-empty">Recommendations are temporarily unavailable.</p>'}
 }
 async function loadHome(){
@@ -131,7 +131,7 @@ async function loadHome(){
    const options=identities.map(item=>'<option value="'+escapeHtml(item.id)+'">'+escapeHtml(item.display_name+' (@'+item.username+')')+'</option>').join("");
    composer='<button class="compose-toggle" id="compose-toggle" type="button" aria-expanded="false" aria-controls="post-composer">+ Post</button><form id="post-composer" class="post-composer" hidden><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
   }
-  const empty=posts.length?"":!signedIn?'<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow creators or managed pages to see their posts here. Use Search to find public creators.</p></section>':'<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Use Search to find public creators.</p></section>';
+  const empty=posts.length?"":!signedIn?'<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow creators or managed pages to see their posts here. Use Search to find public profiles.</p></section>':'<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Use Search to find public profiles.</p></section>';
   feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):empty);
   loadPostReactionStates(feed);loadRecommendations();
  }catch(error){renderRequestError(error)}
@@ -140,16 +140,16 @@ async function loadHome(){
 async function loadSearch(query=""){
  pageTitle.textContent="Search";
  const term=String(query||"").trim();
- feed.innerHTML='<form id="creator-search-form" class="search-form"><input name="q" type="search" maxlength="48" minlength="2" value="'+escapeHtml(term)+'" placeholder="Search creators and pages" aria-label="Search creators and pages" required><button class="post-action" type="submit">Search</button></form><div id="search-results" class="search-results">'+(term?'<div class="loading"><span class="spinner"></span></div>':'<section class="empty-card"><strong>Find creators and pages.</strong><p>Search by name or handle. Private profiles are not listed.</p></section>')+'</div>';
+ feed.innerHTML='<form id="profile-search-form" class="search-form"><input name="q" type="search" maxlength="48" minlength="2" value="'+escapeHtml(term)+'" placeholder="Search profiles and pages" aria-label="Search profiles and pages" required><button class="post-action" type="submit">Search</button></form><div id="search-results" class="search-results">'+(term?'<div class="loading"><span class="spinner"></span></div>':'<section class="empty-card"><strong>Find profiles and pages.</strong><p>Search by name or handle. Private profiles are not listed.</p></section>')+'</div>';
  const aside=document.querySelector("#recommendations");if(aside)aside.hidden=true;
- if(term)await runCreatorSearch(term);
+ if(term)await runProfileSearch(term);
 }
-async function runCreatorSearch(term){
+async function runProfileSearch(term){
  const target=document.querySelector("#search-results");if(!target)return;
  target.innerHTML='<div class="loading"><span class="spinner"></span><p>Searching…</p></div>';
  try{
   const data=await api("/api/search?q="+encodeURIComponent(term)),results=data.results||[];
-  target.innerHTML=results.length?'<div class="search-result-list">'+results.map(item=>'<a class="search-result" href="/@'+encodeURIComponent(item.username)+'">'+avatar(item.profile_picture,item.display_name||item.username)+'<span class="search-result-info"><strong>'+escapeHtml(item.display_name||item.username)+verifiedMark(item.verified)+'</strong><small>@'+escapeHtml(item.username)+' · '+(item.type==="page"?"Page":"Creator")+' · '+Number(item.follower_count||0).toLocaleString()+' followers</small></span></a>').join("")+'</div>':'<section class="empty-card"><strong>No public results.</strong><p>Try another name or handle.</p></section>';
+  target.innerHTML=results.length?'<div class="search-result-list">'+results.map(item=>'<a class="search-result" href="/@'+encodeURIComponent(item.username)+'">'+avatar(item.profile_picture,item.display_name||item.username)+'<span class="search-result-info"><strong>'+escapeHtml(item.display_name||item.username)+verifiedMark(item.verified)+'</strong><small>@'+escapeHtml(item.username)+' · '+(item.type==="page"?"Page":"Profile")+' · '+Number(item.follower_count||0).toLocaleString()+' followers</small></span></a>').join("")+'</div>':'<section class="empty-card"><strong>No public results.</strong><p>Try another name or handle.</p></section>';
  }catch(error){renderRequestError(error)}
 }
 function closeProfileEditor(){const modal=document.querySelector("#profile-editor-modal");if(modal)modal.remove()}
@@ -184,7 +184,7 @@ function openProfileEditor(profile){
  const modal=document.createElement("div");
  modal.id="profile-editor-modal";
  modal.className="modal";
- modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">'+(isPage?'PAGE SETTINGS':'CREATOR SETTINGS')+'</span><h2 id="profile-editor-title">'+(isPage?'Edit subaccount':'Edit Creator page')+'</h2><form id="profile-editor-form" data-page-id="'+(isPage?escapeHtml(profile.id):'')+'">'+(isPage?'<label for="edit-handle">Handle</label><input id="edit-handle" name="handle" maxlength="24" minlength="2" pattern="[A-Za-z0-9_]{2,24}" required>':'')+'<label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" required placeholder="Display name">'+(isPage?'':'<label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea>')+(isPage?'':'<label class="privacy-toggle"><input type="checkbox" name="is_private"> Private profile <span>Your profile and posts are visible only to you and your followers.</span></label>')+'<label for="edit-banner-image">Profile banner</label><input id="edit-banner-image" name="banner_image_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="banner-editor-preview" id="banner-editor-preview"></div><button type="button" class="post-action" id="remove-banner-image">Remove banner</button><p class="editor-hint">The full image remains visible on desktop, tablet, and mobile.</p><label for="edit-profile-picture">Profile photo</label><input id="edit-profile-picture" name="profile_picture_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="profile-photo-preview" id="profile-photo-preview"></div><button type="button" class="post-action" id="remove-profile-picture">Remove photo</button><p class="editor-hint">Choose a PNG, JPEG, or WebP image. It will be resized before upload.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
+ modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">'+(isPage?'PAGE SETTINGS':'PROFILE SETTINGS')+'</span><h2 id="profile-editor-title">'+(isPage?'Edit subaccount':'Edit Profile')+'</h2><form id="profile-editor-form" data-page-id="'+(isPage?escapeHtml(profile.id):'')+'">'+(isPage?'<label for="edit-handle">Handle</label><input id="edit-handle" name="handle" maxlength="24" minlength="2" pattern="[A-Za-z0-9_]{2,24}" required>':'')+'<label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" required placeholder="Display name">'+(isPage?'':'<label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea>')+(isPage?'':'<label class="privacy-toggle"><input type="checkbox" name="is_private"> Private profile <span>Your profile and posts are visible only to you and your followers.</span></label>')+'<label for="edit-banner-image">Profile banner</label><input id="edit-banner-image" name="banner_image_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="banner-editor-preview" id="banner-editor-preview"></div><button type="button" class="post-action" id="remove-banner-image">Remove banner</button><p class="editor-hint">The full image remains visible on desktop, tablet, and mobile.</p><label for="edit-profile-picture">Profile photo</label><input id="edit-profile-picture" name="profile_picture_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="profile-photo-preview" id="profile-photo-preview"></div><button type="button" class="post-action" id="remove-profile-picture">Remove photo</button><p class="editor-hint">Choose a PNG, JPEG, or WebP image. It will be resized before upload.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
  document.body.append(modal);
  modal.querySelector('[name="display_name"]').value=profile.display_name||"";
  if(isPage)modal.querySelector('[name="handle"]').value=profile.username||"";
@@ -208,12 +208,13 @@ async function saveProfileEditor(form){
   const bannerFile=form.elements.banner_image_file.files[0];if(bannerFile)values.banner_image=await resizeBannerImage(bannerFile);
   if(form.dataset.removeBanner==="true")values.banner_image="";
   if(form.dataset.removePhoto==="true")values.profile_picture="";
-  const endpoint=isPage?"/api/pages/"+encodeURIComponent(form.dataset.pageId):"/api/profile/me";
+  const currentProfileName=decodeURIComponent(location.pathname.split("/")[1].replace(/^@/,""));
+  const endpoint=isPage?"/api/pages/"+encodeURIComponent(form.dataset.pageId):"/api/profile/"+encodeURIComponent(currentProfileName);
   const response=await fetch(endpoint,{method:"PATCH",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+token},credentials:"same-origin",body:JSON.stringify(values)});
   const data=await response.json().catch(()=>({}));
-  if(!response.ok){const messages={image_too_large:"The resized photo must be 400 KB or smaller.",invalid_image:"Choose a PNG, JPEG, or WebP photo.",unauthorized:"Your TC sign-in has expired. Please sign in again.",display_name_too_long:"Display name must be 80 characters or fewer.",bio_too_long:"Bio must be 500 characters or fewer.",invalid_profile_picture_url:"Profile picture must be a valid HTTPS URL."};throw new Error(messages[data.error]||data.message||"Your Creator page could not be saved. Please try again.");}
+  if(!response.ok){const messages={image_too_large:"The resized photo must be 400 KB or smaller.",invalid_image:"Choose a PNG, JPEG, or WebP photo.",unauthorized:"Your TC sign-in has expired. Please sign in again.",display_name_too_long:"Display name must be 80 characters or fewer.",bio_too_long:"Bio must be 500 characters or fewer.",invalid_profile_picture_url:"Profile picture must be a valid HTTPS URL."};throw new Error(messages[data.error]||data.message||"Your profile could not be saved. Please try again.");}
   closeProfileEditor();
-  showToast(isPage?"Subaccount updated.":"Creator page updated.");
+  showToast(isPage?"Subaccount updated.":"Profile updated.");
   history.replaceState({}, "", "/@"+encodeURIComponent(data.profile.username));
   loadProfile(data.profile.username);
   const user=JSON.parse(sessionStorage.getItem("tc_social_user")||"null");
@@ -227,20 +228,20 @@ async function saveProfileEditor(form){
 }
 
 async function loadProfile(username){
- pageTitle.textContent="Creator";
+ pageTitle.textContent="Profile";
  try{
   const data=await api("/api/profile/"+encodeURIComponent(username));
   const p=data.profile;
   const name=p.display_name||"@"+p.username;
-  const canEdit=Boolean(p.can_manage)||(!p.is_page&&String(JSON.parse(sessionStorage.getItem("tc_social_user")||"null")?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase());
+  const canEdit=Boolean(p.can_manage||p.can_edit)||(!p.is_page&&String(JSON.parse(sessionStorage.getItem("tc_social_user")||"null")?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase());
   const followButton=p.is_page||!canEdit?'<button class="post-action" data-follow="'+escapeHtml(p.username)+'" aria-pressed="false">Follow</button>':"";
-  feed.innerHTML='<section class="profile-card">'+(p.banner_image?'<div class="profile-banner"><img src="'+escapeHtml(safeMediaUrl(p.banner_image))+'" alt="'+escapeHtml(name)+' banner"></div>':"")+'<div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+verifiedMark(p.verified)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span><span class="follower-count" data-follower-count>'+Number(p.follower_count||0).toLocaleString()+' followers</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>'+(p.is_page?followButton:""):followButton)+(p.can_verify?'<button class="post-action" data-verify-type="'+(p.is_page?"page":"user")+'" data-verify-name="'+escapeHtml(p.username)+'" data-verified="'+String(Boolean(p.verified))+'">'+(p.verified?"Remove verification":"Verify")+'</button>':"")+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
+  feed.innerHTML='<section class="profile-card">'+(p.banner_image?'<div class="profile-banner"><img src="'+escapeHtml(safeMediaUrl(p.banner_image))+'" alt="'+escapeHtml(name)+' banner"></div>':"")+'<div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+verifiedMark(p.verified)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span><span class="follower-count" data-follower-count>'+Number(p.follower_count||0).toLocaleString()+' followers</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>'+(p.is_page?followButton:""):followButton)+(p.can_verify?'<button class="post-action" data-verify-type="'+(p.is_page?"page":"user")+'" data-verify-name="'+escapeHtml(p.username)+'" data-verified="'+String(Boolean(p.verified))+'">'+(p.verified?"Remove verification":"Verify")+'</button>':"")+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">PROFILE POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
   if(followButton&&sessionStorage.getItem("tc_social_access_token")){
    try{const status=await api("/api/follow/"+encodeURIComponent(p.username));const follow=feed.querySelector("[data-follow]");if(follow){follow.textContent=status.following?"Following":"Follow";follow.setAttribute("aria-pressed",String(status.following));}}catch{}
   }
   const posts=await api("/api/profile/"+encodeURIComponent(username)+"/posts");
   const target=document.querySelector("#profile-posts");
-  target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This creator has not posted yet.</section>';
+  target.innerHTML=posts.posts?.length?posts.posts.map(renderPost).join(""):'<section class="empty-card">This profile has not posted yet.</section>';
   loadPostReactionStates(target);
  }catch(error){renderRequestError(error)}
 }
@@ -263,7 +264,7 @@ document.addEventListener("click",async event=>{
  const logout=event.target.closest("[data-account-logout]");
  if(logout){sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user");sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");location.assign("/");return}
  const editProfile=event.target.closest("[data-edit-profile]");
- if(editProfile){try{const username=decodeURIComponent(location.pathname.split("/")[1].replace(/^@/,""));const profile=await api("/api/profile/"+encodeURIComponent(username));openProfileEditor(profile.profile)}catch(error){showToast("Could not load your Creator page settings.")}return}
+ if(editProfile){try{const username=decodeURIComponent(location.pathname.split("/")[1].replace(/^@/,""));const profile=await api("/api/profile/"+encodeURIComponent(username));openProfileEditor(profile.profile)}catch(error){showToast("Could not load your profile settings.")}return}
  if(!event.target.closest(".account-menu-wrap")){const dropdown=document.querySelector("[data-account-dropdown]");const toggle=document.querySelector("[data-tc-header-account][aria-expanded]");if(dropdown)dropdown.hidden=true;if(toggle)toggle.setAttribute("aria-expanded","false")}
  const signIn=event.target.closest("[data-tc-signin]");
  if(signIn){event.preventDefault();beginSignIn();return}
@@ -345,7 +346,7 @@ document.addEventListener("submit",async event=>{
  }catch(error){errorBox.textContent=error.message;button.disabled=false;button.textContent="Post"}
 });
 document.addEventListener("submit",async event=>{
- if(event.target.id==="creator-search-form"){event.preventDefault();const query=event.target.elements.q.value.trim();history.replaceState({},"","/search?q="+encodeURIComponent(query));runCreatorSearch(query);return}
+ if(event.target.id==="profile-search-form"){event.preventDefault();const query=event.target.elements.q.value.trim();history.replaceState({},"","/search?q="+encodeURIComponent(query));runProfileSearch(query);return}
  const form=event.target.closest(".comment-form");
  if(!form)return;
  event.preventDefault();
