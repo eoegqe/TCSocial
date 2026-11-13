@@ -1,7 +1,8 @@
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});
 const notFound=()=>json({error:"not_found"},404);
 const publicPicture=(value,username)=>String(value||"").startsWith("upload:")?"/api/avatar/"+encodeURIComponent(username):value;
-const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username)});
+const publicBanner=(value,username)=>String(value||"").startsWith("upload:")?"/api/banner/"+encodeURIComponent(username):value;
+const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),verified:Boolean(row.verified)});
 const publicPosts=rows=>(rows||[]).map(row=>({...row,profile_picture:publicPicture(row.profile_picture,row.username)}));
 export default {
   async fetch(request,env){
@@ -32,6 +33,19 @@ export default {
       return new Response(repaired,{status:asset.status,headers:asset.headers});
     }
     if(url.pathname==="/api/auth/config"&&request.method==="GET")return json({client_id:env.TC_SOCIAL_CLIENT_ID||null,redirect_uri:new URL("/auth/callback",url.origin).toString()});
+    if(url.pathname.startsWith("/api/banner/")&&request.method==="GET"){
+      const username=decodeURIComponent(url.pathname.slice("/api/banner/".length));
+      if(!username||username.length>64)return notFound();
+      try{
+        let row=await env.TC.prepare("SELECT banner_image FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        if(!row)row=await env.TC.prepare("SELECT banner_image FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        const match=String(row?.banner_image||"").match(/^upload:(image\/(?:webp|jpeg|png)):([A-Za-z0-9+/]+={0,2})$/);
+        if(!match)return notFound();
+        const binary=atob(match[2]),bytes=new Uint8Array(binary.length);
+        for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+        return new Response(bytes,{headers:{"content-type":match[1],"cache-control":"public, max-age=3600","x-content-type-options":"nosniff"}});
+      }catch(error){console.error("TC Social banner query failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
     if(url.pathname.startsWith("/api/avatar/")&&request.method==="GET"){
       const username=decodeURIComponent(url.pathname.slice("/api/avatar/".length));
       if(!username||username.length>64)return notFound();
@@ -53,10 +67,10 @@ export default {
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
         if(!identityResponse.ok)return json({error:"unauthorized"},401);
         const identity=await identityResponse.json();
-        const user=await env.TC.prepare("SELECT id,username,display_name,profile_picture FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
+        const user=await env.TC.prepare("SELECT id,username,display_name,profile_picture,verified FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
         if(!user)return json({error:"social_account_required"},403);
-        const pages=await env.TC.prepare("SELECT p.id,p.handle,p.display_name,p.profile_picture FROM social_pages p JOIN social_page_managers m ON m.page_id=p.id WHERE m.user_id=? AND p.status='active' ORDER BY p.display_name COLLATE NOCASE").bind(user.id).all();
-        return json({identities:[{id:"",type:"user",username:user.username,display_name:user.display_name||user.username,profile_picture:publicPicture(user.profile_picture,user.username)},...(pages.results||[]).map(page=>({id:String(page.id),type:"page",username:page.handle,display_name:page.display_name,profile_picture:page.profile_picture}))]});
+        const pages=await env.TC.prepare("SELECT p.id,p.handle,p.display_name,p.profile_picture,p.verified FROM social_pages p JOIN social_page_managers m ON m.page_id=p.id WHERE m.user_id=? AND p.status='active' ORDER BY p.display_name COLLATE NOCASE").bind(user.id).all();
+        return json({identities:[{id:"",type:"user",username:user.username,display_name:user.display_name||user.username,profile_picture:publicPicture(user.profile_picture,user.username),verified:Boolean(user.verified)},...(pages.results||[]).map(page=>({id:String(page.id),type:"page",username:page.handle,display_name:page.display_name,profile_picture:page.profile_picture,verified:Boolean(page.verified)}))]});
       }catch(error){console.error("TC Social identity list failed",String(error?.message||error));return json({error:"identities_unavailable"},503)}
     }
     if(url.pathname==="/api/posts"&&request.method==="POST"){
@@ -170,6 +184,23 @@ export default {
         return json({error:"method_not_allowed"},405);
       }catch(error){console.error("TC Social engagement request failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
+    if(url.pathname==="/api/verification"&&request.method==="POST"){
+      const authorization=request.headers.get("authorization")||"",match=authorization.match(/^Bearer\s+(.+)$/i);
+      if(!match)return json({error:"unauthorized"},401);
+      try{
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({error:"unauthorized"},401);
+        const identity=await identityResponse.json();
+        if(Number(identity.sub)!==1)return json({error:"forbidden"},403);
+        const body=await request.json().catch(()=>null);
+        if(!body||!["user","page"].includes(body.type)||typeof body.username!=="string"||typeof body.verified!=="boolean")return json({error:"invalid_body"},400);
+        const result=body.type==="user"
+          ?await env.TC.prepare("UPDATE users SET verified=? WHERE username=? COLLATE NOCASE AND status='active'").bind(body.verified?1:0,body.username).run()
+          :await env.TC.prepare("UPDATE social_pages SET verified=? WHERE handle=? COLLATE NOCASE AND status='active'").bind(body.verified?1:0,body.username).run();
+        if(!result.meta?.changes)return notFound();
+        return json({verified:body.verified});
+      }catch(error){console.error("TC Social verification update failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
     if(url.pathname.startsWith("/api/pages/")&&request.method==="PATCH"){
       const pageId=Number(url.pathname.slice("/api/pages/".length));
       if(!Number.isSafeInteger(pageId)||pageId<1)return json({error:"invalid_page"},400);
@@ -183,7 +214,7 @@ export default {
         const userId=Number(identity.sub);
         const manager=await env.TC.prepare("SELECT role FROM social_page_managers WHERE page_id=? AND user_id=?").bind(pageId,userId).first();
         if(!manager||!["owner","admin"].includes(manager.role))return json({error:"forbidden"},403);
-        const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture FROM social_pages WHERE id=? AND status='active'").bind(pageId).first();
+        const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image FROM social_pages WHERE id=? AND status='active'").bind(pageId).first();
         if(!page)return notFound();
         const body=await request.json().catch(()=>null);
         if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
@@ -192,6 +223,7 @@ export default {
         if(!displayName||displayName.length>80)return json({error:"invalid_display_name"},400);
         if(!/^[A-Za-z0-9_]{3,24}$/.test(handle)&&handle.toLowerCase()!=="tc")return json({error:"invalid_handle",message:"Handles must be 3–24 letters, numbers, or underscores. @TC is reserved."},400);
         let picture=Object.prototype.hasOwnProperty.call(body,"profile_picture")?(body.profile_picture==null||String(body.profile_picture).trim()===""?null:String(body.profile_picture).trim()):page.profile_picture;
+        let banner=Object.prototype.hasOwnProperty.call(body,"banner_image")?(body.banner_image==null||String(body.banner_image).trim()===""?null:String(body.banner_image).trim()):page.banner_image;
         if(picture&&picture.startsWith("data:")){
           const uploaded=picture.match(/^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
           if(!uploaded)return json({error:"invalid_image"},400);
@@ -204,8 +236,19 @@ export default {
           if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url"},400);
           if(picture.length>2048)return json({error:"profile_picture_url_too_long"},400);
         }
-        await env.TC.prepare("UPDATE social_pages SET handle=?,display_name=?,profile_picture=? WHERE id=?").bind(handle,displayName,picture,pageId).run();
-        return json({profile:{id:pageId,username:handle,display_name:displayName,profile_picture:publicPicture(picture,handle),is_page:true,can_manage:true}});
+        if(banner&&banner.startsWith("data:")){
+          const uploaded=banner.match(/^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
+          if(!uploaded)return json({error:"invalid_image"},400);
+          let decoded;try{decoded=atob(uploaded[2])}catch{return json({error:"invalid_image"},400)}
+          if(decoded.length>400000)return json({error:"image_too_large"},413);
+          banner="upload:"+uploaded[1]+":"+uploaded[2];
+        }
+        if(banner&&!banner.startsWith("upload:")){
+          let imageUrl;try{imageUrl=new URL(banner)}catch{return json({error:"invalid_banner_url"},400)}
+          if(imageUrl.protocol!=="https:"||banner.length>2048)return json({error:"invalid_banner_url"},400);
+        }
+        await env.TC.prepare("UPDATE social_pages SET handle=?,display_name=?,profile_picture=?,banner_image=? WHERE id=?").bind(handle,displayName,picture,banner,pageId).run();
+        return json({profile:{id:pageId,username:handle,display_name:displayName,profile_picture:publicPicture(picture,handle),banner_image:publicBanner(banner,handle),is_page:true,can_manage:true}});
       }catch(error){
         if(String(error?.message||"").includes("UNIQUE"))return json({error:"handle_taken",message:"That handle is already in use."},409);
         console.error("TC Social page update failed",String(error?.message||error));
@@ -227,6 +270,7 @@ export default {
         const displayName=body.display_name==null||String(body.display_name).trim()===""?null:String(body.display_name).trim();
         const bio=body.bio==null||String(body.bio).trim()===""?null:String(body.bio).trim();
         let picture=Object.prototype.hasOwnProperty.call(body,"profile_picture")?(body.profile_picture==null||String(body.profile_picture).trim()===""?null:String(body.profile_picture).trim()):undefined;
+        let banner=Object.prototype.hasOwnProperty.call(body,"banner_image")?(body.banner_image==null||String(body.banner_image).trim()===""?null:String(body.banner_image).trim()):undefined;
         if(picture&&picture.startsWith("data:")){
           const uploaded=picture.match(/^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
           if(!uploaded)return json({error:"invalid_image"},400);
@@ -234,6 +278,17 @@ export default {
           try{decoded=atob(uploaded[2])}catch{return json({error:"invalid_image"},400)}
           if(decoded.length>400000)return json({error:"image_too_large"},413);
           picture="upload:"+uploaded[1]+":"+uploaded[2];
+        }
+        if(banner&&banner.startsWith("data:")){
+          const uploaded=banner.match(/^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
+          if(!uploaded)return json({error:"invalid_image"},400);
+          let decoded;try{decoded=atob(uploaded[2])}catch{return json({error:"invalid_image"},400)}
+          if(decoded.length>400000)return json({error:"image_too_large"},413);
+          banner="upload:"+uploaded[1]+":"+uploaded[2];
+        }
+        if(banner&&!banner.startsWith("upload:")){
+          let imageUrl;try{imageUrl=new URL(banner)}catch{return json({error:"invalid_banner_url"},400)}
+          if(imageUrl.protocol!=="https:"||banner.length>2048)return json({error:"invalid_banner_url"},400);
         }
         if(displayName&&displayName.length>80)return json({error:"display_name_too_long",message:"Display name must be 80 characters or fewer."},400);
         if(bio&&bio.length>500)return json({error:"bio_too_long",message:"Bio must be 500 characters or fewer."},400);
@@ -243,11 +298,9 @@ export default {
           try{imageUrl=new URL(picture)}catch{return json({error:"invalid_profile_picture_url",message:"Profile picture must be a valid HTTPS image URL."},400)}
           if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url",message:"Profile picture must use HTTPS."},400);
         }
-        const result=picture===undefined
-          ?await env.TC.prepare("UPDATE users SET display_name=?,bio=? WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,username).run()
-          :await env.TC.prepare("UPDATE users SET display_name=?,bio=?,profile_picture=? WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,picture,username).run();
+        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,profile_picture=COALESCE(?,profile_picture),banner_image=COALESCE(?,banner_image) WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,picture===undefined?null:picture,banner===undefined?null:banner,username).run();
         if(!result.meta?.changes)return notFound();
-        const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture FROM users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
+        const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture,banner_image,verified FROM users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
         return json({profile:safeUser(updated)});
       }catch(error){
         console.error("TC Social profile update failed",String(error?.message||error));
@@ -260,9 +313,9 @@ export default {
       const username=decodeURIComponent(parts[2]||"").replace(/^@/,"");
       if(!username||username.length>64)return json({error:"invalid_username"},400);
       try{
-        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,verified FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
         if(!user){
-          const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+          const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image,verified FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
           if(parts.length===3){
             let canManage=false;
@@ -278,7 +331,7 @@ export default {
                 }
               }catch{}
             }
-            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),is_page:true,can_manage:canManage,follower_count:Number(followers?.count||0)}});
+            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),is_page:true,can_manage:canManage,can_verify:Number(identity?.sub)===1,follower_count:Number(followers?.count||0)}});
           }
           if(parts.length===4&&parts[3]==="posts"){
             const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
@@ -286,7 +339,7 @@ export default {
           }
           return notFound();
         }
-        if(parts.length===3){const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_follows WHERE followed_id=?").bind(user.id).first();return json({profile:{...safeUser(user),is_page:false,follower_count:Number(followers?.count||0)}});}
+        if(parts.length===3){let canVerify=false;const auth=request.headers.get("authorization")||"",tokenMatch=auth.match(/^Bearer\s+(.+)$/i);if(tokenMatch){const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});if(identityResponse.ok){const identity=await identityResponse.json();canVerify=Number(identity.sub)===1;}}const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_follows WHERE followed_id=?").bind(user.id).first();return json({profile:{...safeUser(user),is_page:false,can_verify:canVerify,follower_count:Number(followers?.count||0)}});}
         if(parts.length===4&&parts[3]==="posts"){
           const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.author_page_id IS NULL AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
           return json({posts:publicPosts(result.results)});
