@@ -281,14 +281,14 @@ export default {
             return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),is_page:true,can_manage:canManage}});
           }
           if(parts.length===4&&parts[3]==="posts"){
-            const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
+            const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
             return json({posts:publicPosts(pagePosts.results)});
           }
           return notFound();
         }
         if(parts.length===3)return json({profile:safeUser(user)});
         if(parts.length===4&&parts[3]==="posts"){
-          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.author_page_id IS NULL AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
+          const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.author_page_id IS NULL AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
           return json({posts:publicPosts(result.results)});
         }
         return notFound();
