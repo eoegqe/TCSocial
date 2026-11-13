@@ -117,7 +117,7 @@ h1,h2,h3,p{margin-top:0}
 @media(max-width:850px){.layout{grid-template-columns:minmax(0,1fr) 230px;gap:14px}}
 @media(max-width:650px){.layout{display:block}.recommendations-column{position:static;margin-top:18px}.recommendation-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-.verified-mark{display:inline-grid;place-items:center;width:17px;height:17px;margin-left:5px;border-radius:50%;background:#2788e8;color:#fff;font:700 10px/1 Arial,sans-serif;vertical-align:middle;flex:none}.verified-business,.verified-group,.verified-staff{width:auto;height:auto;min-width:17px;background:transparent;border-radius:0;font-size:14px}.verified-staff{filter:none}
+.verified-mark{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;margin-left:5px;color:#2788e8;vertical-align:middle;flex:none}.verified-mark svg{display:block;width:16px;height:16px}.verified-business,.verified-group,.verified-staff{width:17px;height:17px;min-width:17px;background:transparent;border-radius:0;font-size:14px}
 .profile-banner{width:100%;height:auto;min-height:0;max-height:none;aspect-ratio:auto;display:block;overflow:visible;background:#080808;border-radius:9px;margin-bottom:20px}
 .profile-banner img{display:block;width:100%;height:auto;max-height:360px;object-fit:contain;object-position:center}
 .banner-editor-preview{width:100%;max-height:150px;overflow:hidden;background:#080808;border:1px solid #333;border-radius:8px}
