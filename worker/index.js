@@ -18,7 +18,8 @@ export default {
       const username=decodeURIComponent(url.pathname.slice("/api/avatar/".length));
       if(!username||username.length>64)return notFound();
       try{
-        const row=await env.TC.prepare("SELECT profile_picture FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        let row=await env.TC.prepare("SELECT profile_picture FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        if(!row)row=await env.TC.prepare("SELECT profile_picture FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
         const match=String(row?.profile_picture||"").match(/^upload:(image\/(?:webp|jpeg|png)):([A-Za-z0-9+/]+={0,2})$/);
         if(!match)return notFound();
         const binary=atob(match[2]),bytes=new Uint8Array(binary.length);
@@ -134,7 +135,7 @@ export default {
           if(picture.length>2048)return json({error:"profile_picture_url_too_long"},400);
         }
         await env.TC.prepare("UPDATE social_pages SET handle=?,display_name=?,profile_picture=? WHERE id=?").bind(handle,displayName,picture,pageId).run();
-        return json({profile:{id:pageId,username:handle,display_name:displayName,profile_picture:picture,is_page:true,can_manage:true}});
+        return json({profile:{id:pageId,username:handle,display_name:displayName,profile_picture:publicPicture(picture,handle),is_page:true,can_manage:true}});
       }catch(error){
         if(String(error?.message||"").includes("UNIQUE"))return json({error:"handle_taken",message:"That handle is already in use."},409);
         console.error("TC Social page update failed",String(error?.message||error));
@@ -207,7 +208,7 @@ export default {
                 }
               }catch{}
             }
-            return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:page.profile_picture,is_page:true,can_manage:canManage}});
+            return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),is_page:true,can_manage:canManage}});
           }
           if(parts.length===4&&parts[3]==="posts"){
             const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,sp.handle AS username,sp.display_name,sp.profile_picture FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
