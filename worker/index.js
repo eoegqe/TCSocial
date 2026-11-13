@@ -81,8 +81,14 @@ export default {
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
         if(!identityResponse.ok)return json({error:"unauthorized"},401);
         const identity=await identityResponse.json();
-        const username=String(identity.preferred_username||"").trim();
-        if(!identity.sub||!username)return json({error:"unauthorized"},401);
+        const signedInUsername=String(identity.preferred_username||"").trim();
+        if(!identity.sub||!signedInUsername)return json({error:"unauthorized"},401);
+        const userId=Number(identity.sub);
+        const targetUsername=url.pathname==="/api/profile/me"?signedInUsername:decodeURIComponent(url.pathname.slice("/api/profile/".length)).replace(/^@/,"");
+        const target=await env.TC.prepare("SELECT id,username FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(targetUsername).first();
+        if(!target)return notFound();
+        if(userId!==1&&Number(target.id)!==userId)return json({error:"forbidden"},403);
+        const username=target.username;
         const body=await request.json().catch(()=>null);
         if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
         const content=String(body.content||"").trim();
@@ -213,7 +219,7 @@ export default {
         const identity=await identityResponse.json();
         const userId=Number(identity.sub);
         const manager=await env.TC.prepare("SELECT role FROM social_page_managers WHERE page_id=? AND user_id=?").bind(pageId,userId).first();
-        if(!manager||!["owner","admin"].includes(manager.role))return json({error:"forbidden"},403);
+        if(userId!==1&&(!manager||!["owner","admin"].includes(manager.role)))return json({error:"forbidden"},403);
         const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image FROM social_pages WHERE id=? AND status='active'").bind(pageId).first();
         if(!page)return notFound();
         const body=await request.json().catch(()=>null);
@@ -255,7 +261,7 @@ export default {
         return json({error:"internal_error"},500);
       }
     }
-    if(url.pathname==="/api/profile/me"&&request.method==="PATCH"){
+    if((url.pathname==="/api/profile/me"||(/^\/api\/profile\/[^/]+$/.test(url.pathname)&&url.pathname!=="/api/profile"))&&request.method==="PATCH"){
       const authorization=request.headers.get("authorization")||"";
       const match=authorization.match(/^Bearer\s+(.+)$/i);
       if(!match)return json({error:"unauthorized"},401);
@@ -299,7 +305,7 @@ export default {
           try{imageUrl=new URL(picture)}catch{return json({error:"invalid_profile_picture_url",message:"Profile picture must be a valid HTTPS image URL."},400)}
           if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url",message:"Profile picture must use HTTPS."},400);
         }
-        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,is_private=COALESCE(?,is_private),profile_picture=CASE WHEN ?=1 THEN ? ELSE profile_picture END,banner_image=CASE WHEN ?=1 THEN ? ELSE banner_image END WHERE username=? COLLATE NOCASE AND status='active'").bind(displayName,bio,isPrivate===undefined?null:(isPrivate?1:0),Object.prototype.hasOwnProperty.call(body,"profile_picture")?1:0,picture,Object.prototype.hasOwnProperty.call(body,"banner_image")?1:0,banner,username).run();
+        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,is_private=COALESCE(?,is_private),profile_picture=CASE WHEN ?=1 THEN ? ELSE profile_picture END,banner_image=CASE WHEN ?=1 THEN ? ELSE banner_image END WHERE id=? AND status='active'").bind(displayName,bio,isPrivate===undefined?null:(isPrivate?1:0),Object.prototype.hasOwnProperty.call(body,"profile_picture")?1:0,picture,Object.prototype.hasOwnProperty.call(body,"banner_image")?1:0,banner,target.id).run();
         if(!result.meta?.changes)return notFound();
         const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture,banner_image,verified,is_private FROM users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
         return json({profile:safeUser(updated)});
@@ -329,7 +335,7 @@ export default {
                   const identity=await identityResponse.json();
                   canVerify=Number(identity.sub)===1;
                   const manager=await env.TC.prepare("SELECT role FROM social_page_managers WHERE page_id=? AND user_id=?").bind(page.id,Number(identity.sub)).first();
-                  canManage=Boolean(manager&&["owner","admin"].includes(manager.role));
+                  canManage=Number(identity.sub)===1||Boolean(manager&&["owner","admin"].includes(manager.role));
                 }
               }catch{}
             }
@@ -349,13 +355,13 @@ export default {
             if(identityResponse.ok){
               const identity=await identityResponse.json();
               const viewer=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
-              if(viewer?.id===user.id)canView=true;
+              if(viewer?.id===user.id||Number(identity.sub)===1)canView=true;
               else if(viewer)canView=Boolean(await env.TC.prepare("SELECT 1 FROM social_follows WHERE follower_id=? AND followed_id=?").bind(viewer.id,user.id).first());
             }
           }
           if(!canView)return json({error:"private_profile",message:"This profile is private."},403);
         }
-        if(parts.length===3){let canVerify=false;const auth=request.headers.get("authorization")||"",tokenMatch=auth.match(/^Bearer\s+(.+)$/i);if(tokenMatch){const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});if(identityResponse.ok){const identity=await identityResponse.json();canVerify=Number(identity.sub)===1;}}const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_follows WHERE followed_id=?").bind(user.id).first();return json({profile:{...safeUser(user),is_page:false,can_verify:canVerify,follower_count:Number(followers?.count||0)}});}
+        if(parts.length===3){let canVerify=false,canEdit=false;const auth=request.headers.get("authorization")||"",tokenMatch=auth.match(/^Bearer\s+(.+)$/i);if(tokenMatch){const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+tokenMatch[1],accept:"application/json"}});if(identityResponse.ok){const identity=await identityResponse.json();canVerify=Number(identity.sub)===1;canEdit=canVerify||Number(identity.sub)===user.id;}}const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_follows WHERE followed_id=?").bind(user.id).first();return json({profile:{...safeUser(user),is_page:false,can_verify:canVerify,can_edit:canEdit,follower_count:Number(followers?.count||0)}});}
         if(parts.length===4&&parts[3]==="posts"){
           const result=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,u.username,u.display_name,u.profile_picture,u.verified,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND p.author_page_id IS NULL AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(user.id).all();
           return json({posts:publicPosts(result.results)});
