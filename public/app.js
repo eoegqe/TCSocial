@@ -4,6 +4,7 @@ document.querySelector("#year").textContent=new Date().getFullYear();
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 const initials=value=>String(value||"TC").trim().slice(0,1).toUpperCase();
 const safeMediaUrl=value=>{if(typeof value!=="string"||!value.trim())return "";try{const url=new URL(value.trim(),location.origin);return ["https:","http:"].includes(url.protocol)?url.href:""}catch{return ""}};
+const verifiedMark=verified=>verified?'<span class="verified-mark" title="Verified" aria-label="Verified">✓</span>':"";
 const avatar=(url,name)=>{const safe=safeMediaUrl(url);return safe?'<img class="avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="avatar">'+escapeHtml(initials(name))+'</span>'};
 const time=value=>{const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})};
 async function api(path){const token=sessionStorage.getItem("tc_social_access_token");const response=await fetch(path,{headers:{accept:"application/json",...(token?{authorization:"Bearer "+token}:{})},credentials:"same-origin"});const data=await response.json().catch(()=>({}));if(!response.ok){const error=new Error("Request failed");error.status=response.status;error.code=data.error;error.confidence=data.confidence;throw error}return data}
@@ -67,7 +68,7 @@ function renderPost(post){
  const name=post.display_name||"@"+post.username;
  const mediaUrl=safeMediaUrl(post.media_url);
  const media=mediaUrl?(/\.(mp4|webm|ogg)(?:$|\?)/i.test(mediaUrl)?'<video class="post-media" controls preload="metadata" src="'+escapeHtml(mediaUrl)+'"></video>':'<img class="post-media" loading="lazy" src="'+escapeHtml(mediaUrl)+'" alt="Post media">'):"";
- return '<article class="post" data-post-id="'+escapeHtml(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+'<div class="post-actions"><button class="post-action" data-react aria-pressed="false">Like <span data-reaction-count>'+Number(post.reaction_count||0)+'</span></button><button class="post-action" data-comments-toggle aria-expanded="false">Comments <span data-comment-count>'+Number(post.comment_count||0)+'</span></button></div><section class="comments-panel" data-comments-panel hidden><div class="comments-list" data-comments-list></div><form class="comment-form"><textarea name="content" maxlength="1000" rows="2" placeholder="Write a comment…" required></textarea><div><span>1,000 characters max</span><button class="post-action" type="submit">Comment</button></div><p class="comment-error" role="alert"></p></form></section></article>';
+ return '<article class="post" data-post-id="'+escapeHtml(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+verifiedMark(post.verified)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+'<div class="post-actions"><button class="post-action" data-react aria-pressed="false">Like <span data-reaction-count>'+Number(post.reaction_count||0)+'</span></button><button class="post-action" data-comments-toggle aria-expanded="false">Comments <span data-comment-count>'+Number(post.comment_count||0)+'</span></button></div><section class="comments-panel" data-comments-panel hidden><div class="comments-list" data-comments-list></div><form class="comment-form"><textarea name="content" maxlength="1000" rows="2" placeholder="Write a comment…" required></textarea><div><span>1,000 characters max</span><button class="post-action" type="submit">Comment</button></div><p class="comment-error" role="alert"></p></form></section></article>';
 }
 async function loadPostReactionStates(root){
  const token=sessionStorage.getItem("tc_social_access_token");
@@ -161,18 +162,30 @@ async function resizeProfilePhoto(file){
  if(!blob||blob.size>400000)throw new Error("This photo is too large after resizing. Choose another image.");
  return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Could not read the selected photo."));reader.readAsDataURL(blob)});
 }
+async function resizeBannerImage(file){
+ if(!["image/png","image/jpeg","image/webp"].includes(file.type))throw new Error("Choose a PNG, JPEG, or WebP banner.");
+ if(file.size>16*1024*1024)throw new Error("Choose a banner smaller than 16 MB.");
+ const bitmap=await createImageBitmap(file),scale=Math.min(1,1600/bitmap.width,700/bitmap.height);
+ const canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+ canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+ let blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",.82));
+ if(!blob||blob.size>400000)blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.65));
+ if(!blob||blob.size>400000)throw new Error("This banner is too large after resizing. Choose another image.");
+ return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Could not read the banner image."));reader.readAsDataURL(blob)});
+}
 function openProfileEditor(profile){
  closeProfileEditor();
  const isPage=Boolean(profile.is_page);
  const modal=document.createElement("div");
  modal.id="profile-editor-modal";
  modal.className="modal";
- modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">'+(isPage?'PAGE SETTINGS':'CREATOR SETTINGS')+'</span><h2 id="profile-editor-title">'+(isPage?'Edit subaccount':'Edit Creator page')+'</h2><form id="profile-editor-form" data-page-id="'+(isPage?escapeHtml(profile.id):'')+'">'+(isPage?'<label for="edit-handle">Handle</label><input id="edit-handle" name="handle" maxlength="24" minlength="2" pattern="[A-Za-z0-9_]{2,24}" required>':'')+'<label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" required placeholder="Display name">'+(isPage?'':'<label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea>')+'<label for="edit-profile-picture">Profile photo</label><input id="edit-profile-picture" name="profile_picture_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="profile-photo-preview" id="profile-photo-preview"></div><button type="button" class="post-action" id="remove-profile-picture">Remove photo</button><p class="editor-hint">Choose a PNG, JPEG, or WebP image. It will be resized before upload.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
+ modal.innerHTML='<div class="modal-backdrop" data-editor-close></div><section class="modal-card profile-editor-card" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title"><button class="modal-close" type="button" data-editor-close aria-label="Close">×</button><span class="eyebrow">'+(isPage?'PAGE SETTINGS':'CREATOR SETTINGS')+'</span><h2 id="profile-editor-title">'+(isPage?'Edit subaccount':'Edit Creator page')+'</h2><form id="profile-editor-form" data-page-id="'+(isPage?escapeHtml(profile.id):'')+'">'+(isPage?'<label for="edit-handle">Handle</label><input id="edit-handle" name="handle" maxlength="24" minlength="2" pattern="[A-Za-z0-9_]{2,24}" required>':'')+'<label for="edit-display-name">Display name</label><input id="edit-display-name" name="display_name" maxlength="80" required placeholder="Display name">'+(isPage?'':'<label for="edit-bio">Bio</label><textarea id="edit-bio" name="bio" maxlength="500" rows="4" placeholder="Tell people about yourself"></textarea>')+'<label for="edit-banner-image">Profile banner</label><input id="edit-banner-image" name="banner_image_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="banner-editor-preview" id="banner-editor-preview"></div><button type="button" class="post-action" id="remove-banner-image">Remove banner</button><p class="editor-hint">The full image remains visible on desktop, tablet, and mobile.</p><label for="edit-profile-picture">Profile photo</label><input id="edit-profile-picture" name="profile_picture_file" type="file" accept="image/png,image/jpeg,image/webp"><div class="profile-photo-preview" id="profile-photo-preview"></div><button type="button" class="post-action" id="remove-profile-picture">Remove photo</button><p class="editor-hint">Choose a PNG, JPEG, or WebP image. It will be resized before upload.</p><p class="editor-error" id="profile-editor-error" role="alert"></p><div class="editor-actions"><button type="button" class="post-action" data-editor-close>Cancel</button><button type="submit" class="editor-save">Save changes</button></div></form></section>';
  document.body.append(modal);
  modal.querySelector('[name="display_name"]').value=profile.display_name||"";
  if(isPage)modal.querySelector('[name="handle"]').value=profile.username||"";
  else modal.querySelector('[name="bio"]').value=profile.bio||"";
  modal.querySelector("#profile-photo-preview").innerHTML=avatar(profile.profile_picture,profile.display_name||profile.username);
+ if(profile.banner_image)modal.querySelector("#banner-editor-preview").innerHTML='<img src="'+escapeHtml(safeMediaUrl(profile.banner_image))+'" alt="Current banner preview">';
  modal.querySelector('[name="display_name"]').focus();
 }
 async function saveProfileEditor(form){
@@ -187,6 +200,8 @@ async function saveProfileEditor(form){
   else values.bio=form.elements.bio.value;
   const file=form.elements.profile_picture_file.files[0];
   if(file)values.profile_picture=await resizeProfilePhoto(file);
+  const bannerFile=form.elements.banner_image_file.files[0];if(bannerFile)values.banner_image=await resizeBannerImage(bannerFile);
+  if(form.dataset.removeBanner==="true")values.banner_image="";
   if(form.dataset.removePhoto==="true")values.profile_picture="";
   const endpoint=isPage?"/api/pages/"+encodeURIComponent(form.dataset.pageId):"/api/profile/me";
   const response=await fetch(endpoint,{method:"PATCH",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+token},credentials:"same-origin",body:JSON.stringify(values)});
@@ -214,7 +229,7 @@ async function loadProfile(username){
   const name=p.display_name||"@"+p.username;
   const canEdit=Boolean(p.can_manage)||(!p.is_page&&String(JSON.parse(sessionStorage.getItem("tc_social_user")||"null")?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase());
   const followButton=p.is_page||!canEdit?'<button class="post-action" data-follow="'+escapeHtml(p.username)+'" aria-pressed="false">Follow</button>':"";
-  feed.innerHTML='<section class="profile-card"><div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span><span class="follower-count" data-follower-count>'+Number(p.follower_count||0).toLocaleString()+' followers</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>'+(p.is_page?followButton:""):followButton)+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
+  feed.innerHTML='<section class="profile-card">'+(p.banner_image?'<div class="profile-banner"><img src="'+escapeHtml(safeMediaUrl(p.banner_image))+'" alt="'+escapeHtml(name)+' banner"></div>':"")+'<div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+verifiedMark(p.verified)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span><span class="follower-count" data-follower-count>'+Number(p.follower_count||0).toLocaleString()+' followers</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>'+(p.is_page?followButton:""):followButton)+(p.can_verify?'<button class="post-action" data-verify-type="'+(p.is_page?"page":"user")+'" data-verify-name="'+escapeHtml(p.username)+'" data-verified="'+String(Boolean(p.verified))+'">'+(p.verified?"Remove verification":"Verify")+'</button>':"")+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+'</section><div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">CREATOR POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
   if(followButton&&sessionStorage.getItem("tc_social_access_token")){
    try{const status=await api("/api/follow/"+encodeURIComponent(p.username));const follow=feed.querySelector("[data-follow]");if(follow){follow.textContent=status.following?"Following":"Follow";follow.setAttribute("aria-pressed",String(status.following));}}catch{}
   }
@@ -225,6 +240,19 @@ async function loadProfile(username){
  }catch(error){renderRequestError(error)}
 }
 document.addEventListener("click",async event=>{
+ const verify=event.target.closest("[data-verify-type]");
+ if(verify){
+  if(!await requireSignIn())return;
+  verify.disabled=true;
+  try{
+   const next=verify.dataset.verified!=="true";
+   const response=await fetch("/api/verification",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({type:verify.dataset.verifyType,username:verify.dataset.verifyName,verified:next})});
+   const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not update verification.");
+   showToast(next?"Creator verified.":"Verification removed.");loadProfile(verify.dataset.verifyName);
+  }catch(error){showToast(error.message);verify.disabled=false}
+  return;
+ }
+ if(event.target.id==="remove-banner-image"){const form=event.target.form;if(form){form.dataset.removeBanner="true";form.elements.banner_image_file.value="";document.querySelector("#banner-editor-preview").innerHTML="";}return}
  const accountToggle=event.target.closest("[data-tc-header-account][aria-expanded]");
  if(accountToggle){event.preventDefault();const dropdown=document.querySelector("[data-account-dropdown]");const opening=dropdown.hidden;dropdown.hidden=!opening;accountToggle.setAttribute("aria-expanded",String(opening));return}
  const logout=event.target.closest("[data-account-logout]");
@@ -271,7 +299,7 @@ document.addEventListener("click",async event=>{
   if(opening&&!panel.dataset.loaded){
    try{
     const response=await fetch("/api/posts/"+post.dataset.postId+"/comments");const data=await response.json();if(!response.ok)throw new Error("Could not load comments.");
-    panel.querySelector("[data-comments-list]").innerHTML=data.comments?.length?data.comments.map(comment=>'<div class="comment"><strong>'+escapeHtml(comment.display_name||comment.username)+'</strong><small>@'+escapeHtml(comment.username)+' · '+escapeHtml(time(comment.created_at))+'</small><p>'+escapeHtml(comment.content)+'</p></div>').join(""):'<p class="no-comments">No comments yet.</p>';
+    panel.querySelector("[data-comments-list]").innerHTML=data.comments?.length?data.comments.map(comment=>'<div class="comment"><strong>'+escapeHtml(comment.display_name||comment.username)+verifiedMark(comment.verified)+'</strong><small>@'+escapeHtml(comment.username)+' · '+escapeHtml(time(comment.created_at))+'</small><p>'+escapeHtml(comment.content)+'</p></div>').join(""):'<p class="no-comments">No comments yet.</p>';
     panel.dataset.loaded="true";
    }catch(error){panel.querySelector("[data-comments-list]").textContent=error.message}
   }
@@ -323,7 +351,7 @@ document.addEventListener("submit",async event=>{
   const response=await fetch("/api/posts/"+post.dataset.postId+"/comments",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({content})});
   const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not publish comment.");
   const comment=data.comment,list=post.querySelector("[data-comments-list]"),empty=list.querySelector(".no-comments");if(empty)empty.remove();
-  list.insertAdjacentHTML("beforeend",'<div class="comment"><strong>'+escapeHtml(comment.display_name||comment.username)+'</strong><small>@'+escapeHtml(comment.username)+' · '+escapeHtml(time(comment.created_at))+'</small><p>'+escapeHtml(comment.content)+'</p></div>');
+  list.insertAdjacentHTML("beforeend",'<div class="comment"><strong>'+escapeHtml(comment.display_name||comment.username)+verifiedMark(comment.verified)+'</strong><small>@'+escapeHtml(comment.username)+' · '+escapeHtml(time(comment.created_at))+'</small><p>'+escapeHtml(comment.content)+'</p></div>');
   const count=post.querySelector("[data-comment-count]");count.textContent=Number(count.textContent||0)+1;form.reset();post.querySelector("[data-comments-panel]").dataset.loaded="true";
  }catch(error){form.querySelector(".comment-error").textContent=error.message}finally{button.disabled=false}
 });
