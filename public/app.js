@@ -205,7 +205,7 @@ document.addEventListener("click",async event=>{
  if(action){document.querySelector("#auth-modal").hidden=false;return}
  if(event.target.closest("[data-close-auth]"))document.querySelector("#auth-modal").hidden=true;
  if(event.target.closest("[data-editor-close]"))closeProfileEditor();
- if(event.target.closest("#remove-profile-picture")){const form=document.querySelector("#profile-editor-form");form.dataset.removePhoto="true";form.elements.profile_picture_file.value="";document.querySelector("#profile-photo-preview").innerHTML='<span class="avatar">TC</span>';}
+ if(event.target.closest("#remove-profile-picture")){const form=document.querySelector("#profile-editor-form");form.dataset.removePhoto="true";form.elements.profile_picture_file.value="";document.querySelector("#profile-photo-preview").innerHTML=avatar("",form.elements.display_name.value||"TC");}
 });
 document.addEventListener("click",event=>{
  const toggle=event.target.closest("#compose-toggle");
