@@ -84,7 +84,9 @@ async function loadHome(){
  try{
   const data=await api("/api/feed");
   const posts=data.posts||[];
-  feed.innerHTML=posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>';
+  const signedIn=Boolean(sessionStorage.getItem("tc_social_access_token"));
+  const composer=signedIn?'<form id="post-composer" class="post-composer"><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?" required></textarea><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>':'';
+  feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):'<section class="empty-card"><strong>Nothing here yet.</strong><p>Posts will appear here as the TC Social community grows.</p></section>');
  }catch(error){renderRequestError(error)}
 }
 
@@ -170,8 +172,27 @@ document.addEventListener("click",async event=>{
  if(event.target.closest("[data-editor-close]"))closeProfileEditor();
  if(event.target.closest("#remove-profile-picture")){const form=document.querySelector("#profile-editor-form");form.dataset.removePhoto="true";form.elements.profile_picture_file.value="";document.querySelector("#profile-photo-preview").innerHTML='<span class="avatar">TC</span>';}
 });
+document.addEventListener("submit",async event=>{
+ if(event.target.id!=="post-composer")return;
+ event.preventDefault();
+ const form=event.target,button=form.querySelector('[type="submit"]'),errorBox=form.querySelector("#post-composer-error");
+ const content=form.elements.content.value.trim();
+ if(!content){errorBox.textContent="Write something before posting.";return}
+ button.disabled=true;button.textContent="Posting…";errorBox.textContent="";
+ try{
+  const response=await fetch("/api/posts",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},credentials:"same-origin",body:JSON.stringify({content})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok){
+   const messages={unauthorized:"Your TC sign-in has expired. Please sign in again.",empty_post:"Write something before posting.",post_too_long:"Posts must be 2,000 characters or fewer.",social_account_required:"Your TC account needs an active TC Social profile before posting."};
+   throw new Error(messages[data.error]||data.message||"Your post could not be published. Please try again.");
+  }
+  showToast("Post published.");
+  await loadHome();
+ }catch(error){errorBox.textContent=error.message;button.disabled=false;button.textContent="Post"}
+});
+document.addEventListener("input",event=>{if(event.target.id==="post-content"){const count=document.querySelector("#post-character-count");if(count)count.textContent=event.target.value.length.toLocaleString()+" / 2,000"}});
 document.addEventListener("submit",event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();saveProfileEditor(event.target)}});
 document.addEventListener("change",event=>{if(event.target.name==="profile_picture_file"){const form=event.target.form;if(form)form.dataset.removePhoto="false";const file=event.target.files?.[0];if(file){const preview=document.querySelector("#profile-photo-preview");if(preview)preview.textContent=file.name}}});
 document.addEventListener("keydown",event=>{if(event.key==="Escape"){document.querySelector("#auth-modal").hidden=true;closeProfileEditor()}});
 if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
-else{let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match){restoreSignIn().then(()=>loadProfile(match[1]))}else{restoreSignIn();loadHome()}}
+else{let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match){restoreSignIn().then(()=>loadProfile(match[1]))}else{restoreSignIn().finally(()=>loadHome())}}
