@@ -343,7 +343,7 @@ export default {
         }
         if(user.is_private){
           let canView=false;
-          const authorization=request.headers.get("authorization")||"",viewerToken=authorization.match(/^Bearer\\s+(.+)$/i);
+          const authorization=request.headers.get("authorization")||"",viewerToken=authorization.match(/^Bearer\s+(.+)$/i);
           if(viewerToken){
             const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+viewerToken[1],accept:"application/json"}});
             if(identityResponse.ok){
