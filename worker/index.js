@@ -44,7 +44,7 @@ export default {
         if(!match)return notFound();
         const binary=atob(match[2]),bytes=new Uint8Array(binary.length);
         for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-        return new Response(bytes,{headers:{"content-type":match[1],"cache-control":"public, max-age=3600","x-content-type-options":"nosniff"}});
+        return new Response(bytes,{headers:{"content-type":match[1],"cache-control":"no-store, no-cache, must-revalidate","cdn-cache-control":"no-store","x-content-type-options":"nosniff"}});
       }catch(error){console.error("TC Social banner query failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
     if(url.pathname.startsWith("/api/avatar/")&&request.method==="GET"){
