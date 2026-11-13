@@ -9,8 +9,8 @@ export default {
   async fetch(request,env){
     const url=new URL(request.url);
     if(url.pathname==="/api/health"&&request.method==="GET")return json({ok:true,service:"TC Social"});
-    if((url.pathname==="/"||url.pathname==="/index.html")&&request.method==="GET"){
-      const asset=await env.ASSETS.fetch(request);
+    if((url.pathname==="/"||url.pathname==="/index.html"||url.pathname==="/u2")&&request.method==="GET"){
+      const asset=await env.ASSETS.fetch(url.pathname==="/u2"?new Request(new URL("/",request.url),request):request);
       let html=await asset.text();
       const removeAside=(input,marker)=>{const start=input.indexOf(marker);if(start<0)return input;const end=input.indexOf("</aside>",start);return end<0?input:input.slice(0,start)+input.slice(end+8)};
       html=removeAside(html,'<aside class="side-column">');
@@ -51,6 +51,16 @@ export default {
       repaired=repaired.replaceAll('["youtube","instagram","tiktok","spotify","twitch","website"]','["youtube","instagram","tiktok","spotify","twitch","x","website"]');
       repaired=repaired.replace('<label for="edit-website">Website</label>','<label for="edit-x">X</label><input id="edit-x" name="social_x" type="url" maxlength="500" placeholder="https://x.com/username"><label for="edit-x-label">X button label</label><input id="edit-x-label" name="social_x_label" maxlength="40" placeholder="e.g. Follow me on X"><label for="edit-website">Website</label>');
       repaired=repaired.replace('twitch:"Twitch",website:"Website"','twitch:"Twitch",x:"X",website:"Website"');
+      repaired=repaired.replace('async function beginSignIn(){','async function beginSignIn(slot=0){');
+      repaired=repaired.replace('sessionStorage.setItem("tc_social_oauth_state",state);sessionStorage.setItem("tc_social_oauth_verifier",verifier);const authorize=new URL("https://accounts.theegget.com/oauth/authorize");','sessionStorage.setItem("tc_social_oauth_state",state);sessionStorage.setItem("tc_social_oauth_verifier",verifier);sessionStorage.setItem("tc_social_oauth_slot",String(slot>=2?slot:0));const authorize=new URL("https://accounts.theegget.com"+(slot>=2?"/oauth/authorize/u"+slot:"/oauth/authorize"));');
+      repaired=repaired.replace('const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});','const authSlot=Number(sessionStorage.getItem("tc_social_account_slot")||0);const response=await fetch("https://accounts.theegget.com/oauth/userinfo"+(authSlot>=2?"/u"+authSlot:""),{headers:{authorization:"Bearer "+token,accept:"application/json"}});');
+      repaired=repaired.replace('async function restoreSignIn(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});','async function restoreSignIn(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{const authSlot=Number(sessionStorage.getItem("tc_social_account_slot")||0);const response=await fetch("https://accounts.theegget.com/oauth/userinfo"+(authSlot>=2?"/u"+authSlot:""),{headers:{authorization:"Bearer "+token,accept:"application/json"}});');
+      repaired=repaired.replace('verifier=sessionStorage.getItem("tc_social_oauth_verifier");if(params.has("error"))','verifier=sessionStorage.getItem("tc_social_oauth_verifier"),authSlot=Number(sessionStorage.getItem("tc_social_oauth_slot")||0),slotSuffix=authSlot>=2?"/u"+authSlot:"";if(params.has("error"))');
+      repaired=repaired.replace('fetch("https://accounts.theegget.com/oauth/token",{method:"POST"','fetch("https://accounts.theegget.com/oauth/token"+slotSuffix,{method:"POST"');
+      repaired=repaired.replace('fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+data.access_token,accept:"application/json"}});','fetch("https://accounts.theegget.com/oauth/userinfo"+slotSuffix,{headers:{authorization:"Bearer "+data.access_token,accept:"application/json"}});');
+      repaired=repaired.replace('sessionStorage.setItem("tc_social_access_token",data.access_token);const userResponse=','sessionStorage.setItem("tc_social_access_token",data.access_token);sessionStorage.setItem("tc_social_account_slot",String(authSlot));const userResponse=');
+      repaired=repaired.replace('sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");history.replaceState','sessionStorage.removeItem("tc_social_oauth_slot");sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");history.replaceState');
+      repaired=repaired.replace('if(location.pathname==="/auth/callback"){completeSignIn().catch','if(location.pathname==="/u2"){beginSignIn(2)}else if(location.pathname==="/auth/callback"){completeSignIn().catch');
       return new Response(repaired,{status:asset.status,headers:asset.headers});
     }
     if(url.pathname==="/api/auth/config"&&request.method==="GET")return json({client_id:env.TC_SOCIAL_CLIENT_ID||null,redirect_uri:new URL("/auth/callback",url.origin).toString()});
