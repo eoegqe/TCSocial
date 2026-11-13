@@ -22,6 +22,7 @@ export default {
       const asset=await env.ASSETS.fetch(request);
       const source=await asset.text();
       let repaired=source.replaceAll("\\n","\n").replaceAll("\\\\","\\");
+      repaired=repaired.replace("  const followButton=p.is_page||!canEdit?'<button class=\"post-action\" data-follow=\"'+escapeHtml(p.username)+'\" aria-pressed=\"false\">Follow</button>':\"\";","  const signedInUser=JSON.parse(sessionStorage.getItem(\"tc_social_user\")||\"null\");\n  const isOwnProfile=!p.is_page&&String(signedInUser?.preferred_username||\"\").toLowerCase()===String(p.username).toLowerCase();\n  const followButton=p.is_page||!isOwnProfile?'<button class=\"post-action\" data-follow=\"'+escapeHtml(p.username)+'\" aria-pressed=\"false\">Follow</button>':\"\";");
       if(!repaired.includes("async function requireSignIn()")){
         const authHelper=`async function requireSignIn(){\n const token=sessionStorage.getItem("tc_social_access_token");\n if(token){try{const response=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token,accept:"application/json"}});const user=await response.json().catch(()=>null);if(response.ok&&user?.sub&&user?.preferred_username){sessionStorage.setItem("tc_social_user",JSON.stringify(user));await updateSignInState(user);return true}}catch{}sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user")}\n await updateSignInState(null);document.querySelector("#auth-modal").hidden=false;return false;\n}\n`;
         repaired=repaired.replace("async function restoreSignIn(){",authHelper+"async function restoreSignIn(){");
@@ -83,12 +84,7 @@ export default {
         const identity=await identityResponse.json();
         const signedInUsername=String(identity.preferred_username||"").trim();
         if(!identity.sub||!signedInUsername)return json({error:"unauthorized"},401);
-        const userId=Number(identity.sub);
-        const targetUsername=url.pathname==="/api/profile/me"?signedInUsername:decodeURIComponent(url.pathname.slice("/api/profile/".length)).replace(/^@/,"");
-        const target=await env.TC.prepare("SELECT id,username FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(targetUsername).first();
-        if(!target)return notFound();
-        if(userId!==1&&Number(target.id)!==userId)return json({error:"forbidden"},403);
-        const username=target.username;
+        const username=signedInUsername;
         const body=await request.json().catch(()=>null);
         if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
         const content=String(body.content||"").trim();
