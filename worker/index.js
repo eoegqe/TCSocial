@@ -307,9 +307,9 @@ export default {
           try{imageUrl=new URL(picture)}catch{return json({error:"invalid_profile_picture_url",message:"Profile picture must be a valid HTTPS image URL."},400)}
           if(imageUrl.protocol!=="https:")return json({error:"invalid_profile_picture_url",message:"Profile picture must use HTTPS."},400);
         }
-        const result=await env.TC.prepare("UPDATE users SET display_name=?,bio=?,is_private=COALESCE(?,is_private),profile_picture=CASE WHEN ?=1 THEN ? ELSE profile_picture END,banner_image=CASE WHEN ?=1 THEN ? ELSE banner_image END WHERE id=? AND status='active'").bind(displayName,bio,isPrivate===undefined?null:(isPrivate?1:0),Object.prototype.hasOwnProperty.call(body,"profile_picture")?1:0,picture,Object.prototype.hasOwnProperty.call(body,"banner_image")?1:0,banner,target.id).run();
-        if(!result.meta?.changes)return notFound();
-        const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture,banner_image,verified,is_private FROM users WHERE username=? COLLATE NOCASE LIMIT 1").bind(username).first();
+        await env.TC.prepare("UPDATE users SET display_name=?,bio=?,is_private=COALESCE(?,is_private),profile_picture=CASE WHEN ?=1 THEN ? ELSE profile_picture END,banner_image=CASE WHEN ?=1 THEN ? ELSE banner_image END WHERE id=? AND status='active'").bind(displayName,bio,isPrivate===undefined?null:(isPrivate?1:0),Object.prototype.hasOwnProperty.call(body,"profile_picture")?1:0,picture,Object.prototype.hasOwnProperty.call(body,"banner_image")?1:0,banner,target.id).run();
+        const updated=await env.TC.prepare("SELECT username,display_name,bio,profile_picture,banner_image,verified,is_private FROM users WHERE id=? AND status='active'").bind(target.id).first();
+        if(!updated)return notFound();
         return json({profile:safeUser(updated)});
       }catch(error){
         console.error("TC Social profile update failed",String(error?.message||error));
