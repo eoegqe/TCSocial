@@ -23,7 +23,7 @@ export default {
         return json({ok:true});
       }catch(error){console.error("TC Social heartbeat failed",String(error?.message||error));return json({error:"presence_unavailable"},503)}
     }
-    if((url.pathname==="/"||url.pathname==="/index.html"||url.pathname==="/u2"||url.pathname==="/u1"||url.pathname==="/u0")&&request.method==="GET"){
+    if((url.pathname==="/"||url.pathname==="/index.html"||url.pathname==="/u2"||url.pathname==="/u1"||url.pathname==="/u0"||url.pathname==="/verify")&&request.method==="GET"){
       const asset=await env.ASSETS.fetch(url.pathname==="/"||url.pathname==="/index.html"?request:new Request(new URL("/",request.url),request));
       let html=await asset.text();
       const removeAside=(input,marker)=>{const start=input.indexOf(marker);if(start<0)return input;const end=input.indexOf("</aside>",start);return end<0?input:input.slice(0,start)+input.slice(end+8)};
@@ -288,6 +288,34 @@ export default {
         }
         return json({error:"method_not_allowed"},405);
       }catch(error){console.error("TC Social engagement request failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
+    if(url.pathname==="/api/verification-requests"&&(request.method==="GET"||request.method==="POST")){
+      const auth=request.headers.get("authorization")||"",token=auth.match(/^Bearer\\s+(.+)$/i);if(!token)return json({error:"unauthorized"},401);
+      try{
+        const ir=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token[1],accept:"application/json"}});if(!ir.ok)return json({error:"unauthorized"},401);
+        const identity=await ir.json(),user=await env.TC.prepare("SELECT id,username,verified FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active'").bind(Number(identity.sub),String(identity.preferred_username||"")).first();if(!user)return json({error:"social_account_required"},403);
+        if(request.method==="GET"){
+          if(url.searchParams.get("review")==="1"){if(user.id!==1)return json({error:"forbidden"},403);const rows=await env.TC.prepare("SELECT r.id,r.verification_type,r.explanation,r.file_name,r.created_at,u.username FROM social_verification_requests r JOIN users u ON u.id=r.user_id WHERE r.status='pending' ORDER BY r.created_at ASC LIMIT 100").all();return json({requests:rows.results||[]})}
+          const pending=await env.TC.prepare("SELECT id,status,created_at FROM social_verification_requests WHERE user_id=? ORDER BY id DESC LIMIT 1").bind(user.id).first();return json({verified:Boolean(user.verified),request:pending||null});
+        }
+        if(user.verified)return json({error:"already_verified",message:"This account is already verified."},409);
+        const existing=await env.TC.prepare("SELECT id FROM social_verification_requests WHERE user_id=? AND status='pending' LIMIT 1").bind(user.id).first();if(existing)return json({error:"request_pending",message:"You already have a pending verification request."},409);
+        const body=await request.json().catch(()=>null);if(!body||!["account","business","group"].includes(body.verification_type))return json({error:"invalid_request"},400);
+        const explanation=String(body.explanation||"").trim(),fileName=String(body.file_name||"proof").replace(/[\\/\\x00-\\x1f]/g,"_").slice(0,120),proof=String(body.proof||"");
+        if(explanation.length<20||explanation.length>1200)return json({error:"invalid_explanation",message:"Explain your request in 20–1,200 characters."},400);
+        const uploaded=proof.match(/^data:(image\\/(?:png|jpeg|webp)|application\\/pdf);base64,([A-Za-z0-9+/]+={0,2})$/);if(!uploaded)return json({error:"invalid_proof",message:"Attach a PNG, JPG, WebP, or PDF proof file."},400);
+        let decoded;try{decoded=atob(uploaded[2])}catch{return json({error:"invalid_proof"},400)}if(decoded.length>600*1024)return json({error:"proof_too_large",message:"Proof files must be 600 KB or smaller."},413);
+        await env.TC.prepare("INSERT INTO social_verification_requests (user_id,verification_type,explanation,file_name,mime_type,proof_data,status,created_at) VALUES (?,?,?,?,?,?,'pending',?)").bind(user.id,body.verification_type,explanation,fileName,uploaded[1],uploaded[2],new Date().toISOString()).run();
+        return json({submitted:true},201);
+      }catch(error){console.error("TC Social verification request failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
+    if(/^\\/api\\/verification-requests\\/\\d+\\/proof$/.test(url.pathname)&&request.method==="GET"){
+      const auth=request.headers.get("authorization")||"",token=auth.match(/^Bearer\\s+(.+)$/i);if(!token)return json({error:"unauthorized"},401);
+      try{const ir=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token[1],accept:"application/json"}});if(!ir.ok)return json({error:"unauthorized"},401);const identity=await ir.json();if(Number(identity.sub)!==1)return json({error:"forbidden"},403);const id=Number(url.pathname.split("/")[3]),row=await env.TC.prepare("SELECT file_name,mime_type,proof_data FROM social_verification_requests WHERE id=?").bind(id).first();if(!row)return notFound();const bytes=Uint8Array.from(atob(row.proof_data),c=>c.charCodeAt(0));return new Response(bytes,{headers:{"content-type":row.mime_type,"content-disposition":'inline; filename="'+row.file_name.replace(/["\\\\]/g,"_")+'"',"cache-control":"no-store","x-content-type-options":"nosniff"}})}catch(error){console.error("TC Social proof read failed",String(error?.message||error));return json({error:"internal_error"},500)}
+    }
+    if(/^\\/api\\/verification-requests\\/\\d+$/.test(url.pathname)&&request.method==="PATCH"){
+      const auth=request.headers.get("authorization")||"",token=auth.match(/^Bearer\\s+(.+)$/i);if(!token)return json({error:"unauthorized"},401);
+      try{const ir=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+token[1],accept:"application/json"}});if(!ir.ok)return json({error:"unauthorized"},401);const identity=await ir.json();if(Number(identity.sub)!==1)return json({error:"forbidden"},403);const body=await request.json().catch(()=>null);if(!body||!["approved","rejected"].includes(body.status))return json({error:"invalid_status"},400);const id=Number(url.pathname.split("/").pop()),item=await env.TC.prepare("SELECT user_id,verification_type,status FROM social_verification_requests WHERE id=?").bind(id).first();if(!item||item.status!=="pending")return json({error:"request_not_pending"},404);if(body.status==="approved")await env.TC.prepare("UPDATE users SET verified=1,verification_type=? WHERE id=?").bind(item.verification_type,item.user_id).run();await env.TC.prepare("UPDATE social_verification_requests SET status=?,reviewed_at=? WHERE id=?").bind(body.status,new Date().toISOString(),id).run();return json({updated:true,status:body.status})}catch(error){console.error("TC Social verification review failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
     if(url.pathname==="/api/verification"&&request.method==="POST"){
       const authorization=request.headers.get("authorization")||"",match=authorization.match(/^Bearer\s+(.+)$/i);
