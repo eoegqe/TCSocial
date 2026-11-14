@@ -135,19 +135,26 @@ async function loadRecommendations(){
 }
 async function loadHome(){
  pageTitle.textContent="Home";
- const aside=document.querySelector("#recommendations");if(aside)aside.hidden=false;
+ const aside=document.querySelector("#recommendations");if(aside){aside.hidden=false;aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div><div class="loading"><span class="spinner"></span></div>'}
+ feed.innerHTML='<div class="loading"><span class="spinner"></span><p>Loading your feed…</p></div>';
+ const signedIn=Boolean(sessionStorage.getItem("tc_social_access_token"));
+ const recommendationsPromise=loadRecommendations();
  try{
-  const data=await api("/api/feed"),posts=data.posts||[],signedIn=Boolean(sessionStorage.getItem("tc_social_access_token"));
+  const [data,identityData]=await Promise.all([
+   api("/api/feed"),
+   signedIn?api("/api/identities").catch(()=>({identities:[]})):Promise.resolve({identities:[]})
+  ]);
+  const posts=data.posts||[],identities=identityData.identities||[];
   let composer="";
   if(signedIn){
-   let identities=[];try{identities=(await api("/api/identities")).identities||[]}catch{}
    const options=identities.map(item=>'<option value="'+escapeHtml(item.id)+'">'+escapeHtml(item.display_name+' (@'+item.username+')')+'</option>').join("");
    composer='<button class="compose-toggle" id="compose-toggle" type="button" aria-expanded="false" aria-controls="post-composer">+ Post</button><form id="post-composer" class="post-composer" enctype="multipart/form-data" hidden><label for="post-identity">Post as</label><select id="post-identity" name="identity_id">'+options+'</select><label for="post-content">Create a post</label><textarea id="post-content" name="content" maxlength="2000" rows="3" placeholder="What would you like to share?"></textarea><label for="post-attachments">Attach images, videos, or files</label><input id="post-attachments" name="attachments" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,text/csv,application/zip,.docx,.xlsx,.pptx"><p class="attachment-hint">Up to 4 files · 8 MB each · 20 MB total</p><div id="attachment-preview" class="attachment-preview"></div><div class="composer-footer"><span id="post-character-count">0 / 2,000</span><button class="publish-post" type="submit">Post</button></div><p class="composer-error" id="post-composer-error" role="alert"></p></form>';
   }
   const empty=posts.length?"":!signedIn?'<section class="empty-card"><strong>Your feed starts with the people you follow.</strong><p>Sign in and follow profiles or managed pages to see their posts here. Use Search to find public profiles.</p></section>':'<section class="empty-card"><strong>Your feed is quiet.</strong><p>Posts from people and pages you follow will appear here. Use Search to find public profiles.</p></section>';
   feed.innerHTML=composer+(posts.length?posts.map(renderPost).join(""):empty);
-  loadPostMedia(feed);loadPostReactionStates(feed);loadRecommendations();
- }catch(error){renderRequestError(error)}
+  loadPostMedia(feed);loadPostReactionStates(feed);
+  await recommendationsPromise;
+ }catch(error){await recommendationsPromise;renderRequestError(error)}
 }
 
 async function loadSearch(query=""){
