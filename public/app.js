@@ -378,7 +378,8 @@ document.addEventListener("change",event=>{
  const files=[...event.target.files];preview.innerHTML=files.map(file=>'<div class="attachment-preview-item"><span>'+escapeHtml(file.name)+'</span><small>'+Math.max(1,Math.round(file.size/1024))+' KB</small></div>').join("");
 });
 document.addEventListener("submit",async event=>{
- if(event.target.id==="verification-request-form"){event.preventDefault();if(await requireSignIn())submitVerificationRequest(event.target);return}\n if(event.target.id!=="post-composer")return;
+ if(event.target.id==="verification-request-form"){event.preventDefault();if(await requireSignIn())submitVerificationRequest(event.target);return}
+ if(event.target.id!=="post-composer")return;
  event.preventDefault();
  if(!await requireSignIn())return;
  const form=event.target,button=form.querySelector('[type="submit"]'),errorBox=form.querySelector("#post-composer-error");
