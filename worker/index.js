@@ -299,7 +299,7 @@ export default {
         const identity=await ir.json(),user=await env.TC.prepare("SELECT id,username,verified FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active'").bind(Number(identity.sub),String(identity.preferred_username||"")).first();if(!user)return json({error:"social_account_required"},403);
         if(request.method==="GET"){
           if(url.searchParams.get("review")==="1"){if(user.id!==1)return json({error:"forbidden"},403);const rows=await env.TC.prepare("SELECT r.id,r.verification_type,r.explanation,r.file_name,r.created_at,u.username FROM social_verification_requests r JOIN users u ON u.id=r.user_id WHERE r.status='pending' ORDER BY r.created_at ASC LIMIT 100").all();return json({requests:rows.results||[]})}
-          const pending=await env.TC.prepare("SELECT id,status,created_at FROM social_verification_requests WHERE user_id=? ORDER BY id DESC LIMIT 1").bind(user.id).first();return json({verified:Boolean(user.verified),request:pending||null});
+          const pending=await env.TC.prepare("SELECT id,status,created_at FROM social_verification_requests WHERE user_id=? AND status='pending' ORDER BY id DESC LIMIT 1").bind(user.id).first();return json({verified:Boolean(user.verified),request:pending||null});
         }
         if(user.verified)return json({error:"already_verified",message:"This account is already verified."},409);
         const existing=await env.TC.prepare("SELECT id FROM social_verification_requests WHERE user_id=? AND status='pending' LIMIT 1").bind(user.id).first();if(existing)return json({error:"request_pending",message:"You already have a pending verification request."},409);
