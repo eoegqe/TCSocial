@@ -500,24 +500,17 @@ export default {
       }catch(error){console.error("TC Social search failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
     if(url.pathname==="/api/recommendations"&&request.method==="GET"){
-      let viewerId=null;
-      const authorization=request.headers.get("authorization")||"",match=authorization.match(/^Bearer\s+(.+)$/i);
-      if(match){
-        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
-        if(identityResponse.ok){
-          const identity=await identityResponse.json();
-          const viewer=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
-          viewerId=viewer?.id??null;
-        }
-      }
+      const authorization=request.headers.get("authorization")||"",match=authorization.match(/^Bearer\\s+(.+)$/i);
+      if(!match)return json({recommendations:[]});
       try{
-        const users=viewerId
-          ?await env.TC.prepare("SELECT u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,'user' AS type,(SELECT COUNT(*) FROM social_follows f WHERE f.followed_id=u.id) AS follower_count FROM users u WHERE u.status='active' AND u.is_private=0 AND u.id<>? AND NOT EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=? AND f.followed_id=u.id) ORDER BY follower_count DESC,u.username COLLATE NOCASE LIMIT 6").bind(viewerId,viewerId).all()
-          :await env.TC.prepare("SELECT u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,'user' AS type,(SELECT COUNT(*) FROM social_follows f WHERE f.followed_id=u.id) AS follower_count FROM users u WHERE u.status='active' AND u.is_private=0 ORDER BY follower_count DESC,u.username COLLATE NOCASE LIMIT 6").all();
-        const pages=viewerId
-          ?await env.TC.prepare("SELECT p.handle AS username,p.display_name,p.profile_picture,p.verified,p.verification_type,p.is_tc_staff,'page' AS type,(SELECT COUNT(*) FROM social_page_follows f WHERE f.page_id=p.id) AS follower_count FROM social_pages p WHERE p.status='active' AND NOT EXISTS(SELECT 1 FROM social_page_follows f WHERE f.follower_id=? AND f.page_id=p.id) AND NOT EXISTS(SELECT 1 FROM social_page_managers m WHERE m.page_id=p.id AND m.user_id=?) ORDER BY follower_count DESC,p.display_name COLLATE NOCASE LIMIT 6").bind(viewerId,viewerId).all()
-          :await env.TC.prepare("SELECT p.handle AS username,p.display_name,p.profile_picture,p.verified,p.verification_type,p.is_tc_staff,'page' AS type,(SELECT COUNT(*) FROM social_page_follows f WHERE f.page_id=p.id) AS follower_count FROM social_pages p WHERE p.status='active' ORDER BY follower_count DESC,p.display_name COLLATE NOCASE LIMIT 6").all();
-        const combined=[...(users.results||[]),...(pages.results||[])].sort((a,b)=>Number(b.follower_count)-Number(a.follower_count)).slice(0,3);
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({recommendations:[]});
+        const identity=await identityResponse.json();
+        const viewer=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
+        if(!viewer)return json({recommendations:[]});
+        const users=await env.TC.prepare("WITH followed_users AS (SELECT followed_id AS id FROM social_follows WHERE follower_id=?), follows_tc AS (SELECT 1 AS yes FROM social_page_follows pf JOIN social_pages sp ON sp.id=pf.page_id WHERE pf.follower_id=? AND sp.handle='TC' COLLATE NOCASE LIMIT 1) SELECT u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,'user' AS type,(SELECT COUNT(*) FROM social_follows f WHERE f.followed_id=u.id) AS follower_count,((SELECT COUNT(DISTINCT followed_by.followed_id) FROM social_follows followed_by JOIN followed_users fu ON fu.id=followed_by.follower_id WHERE followed_by.followed_id=u.id)+(CASE WHEN u.is_tc_staff=1 AND EXISTS(SELECT 1 FROM follows_tc) THEN 3 ELSE 0 END)) AS recommendation_score FROM users u WHERE u.status='active' AND u.is_private=0 AND u.id<>? AND NOT EXISTS(SELECT 1 FROM social_follows existing WHERE existing.follower_id=? AND existing.followed_id=u.id) AND ((EXISTS(SELECT 1 FROM social_follows connection WHERE connection.followed_id=u.id AND connection.follower_id IN (SELECT id FROM followed_users))) OR (u.is_tc_staff=1 AND EXISTS(SELECT 1 FROM follows_tc))) ORDER BY recommendation_score DESC,follower_count DESC,u.username COLLATE NOCASE LIMIT 12").bind(viewer.id,viewer.id,viewer.id,viewer.id).all();
+        const pages=await env.TC.prepare("WITH followed_users AS (SELECT followed_id AS id FROM social_follows WHERE follower_id=?) SELECT p.handle AS username,p.display_name,p.profile_picture,p.verified,p.verification_type,p.is_tc_staff,'page' AS type,(SELECT COUNT(*) FROM social_page_follows f WHERE f.page_id=p.id) AS follower_count,(SELECT COUNT(DISTINCT pf.follower_id) FROM social_page_follows pf JOIN followed_users fu ON fu.id=pf.follower_id WHERE pf.page_id=p.id) AS recommendation_score FROM social_pages p WHERE p.status='active' AND NOT EXISTS(SELECT 1 FROM social_page_follows existing WHERE existing.follower_id=? AND existing.page_id=p.id) AND NOT EXISTS(SELECT 1 FROM social_page_managers m WHERE m.page_id=p.id AND m.user_id=?) AND EXISTS(SELECT 1 FROM social_page_follows connection WHERE connection.page_id=p.id AND connection.follower_id IN (SELECT id FROM followed_users)) ORDER BY recommendation_score DESC,follower_count DESC,p.display_name COLLATE NOCASE LIMIT 12").bind(viewer.id,viewer.id,viewer.id).all();
+        const combined=[...(users.results||[]),...(pages.results||[])].sort((a,b)=>Number(b.recommendation_score)-Number(a.recommendation_score)||Number(b.follower_count)-Number(a.follower_count)||String(a.username).localeCompare(String(b.username))).slice(0,3);
         return json({recommendations:combined.map(item=>({...item,profile_picture:publicPicture(item.profile_picture,item.username)}))});
       }catch(error){console.error("TC Social recommendations failed",String(error?.message||error));return json({error:"internal_error"},500)}
     }
