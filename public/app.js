@@ -240,6 +240,19 @@ async function saveProfileEditor(form){
  }catch(error){errorBox.textContent=error.message;submit.disabled=false;submit.textContent="Save changes"}
 }
 
+async function loadVerificationPage(){
+ pageTitle.textContent="Request verification";
+ feed.innerHTML='<section class="profile-card"><span class="eyebrow">TC SOCIAL</span><h1 class="profile-name">Request verification</h1><p class="bio">Choose a verification type and attach proof supporting your request. Proof is only visible to TC reviewers.</p><div id="verification-request-content"></div></section>';
+ const root=document.querySelector("#verification-request-content");
+ if(!sessionStorage.getItem("tc_social_access_token")){root.innerHTML='<p>Sign in with TC to continue.</p><a href="#" data-tc-signin>Sign in with TC</a>';return}
+ try{const status=await api("/api/verification-requests");if(status.verified){root.textContent="This account is already verified. You cannot submit another request.";return}if(status.request){root.textContent="Your request is "+status.request.status+".";return}root.innerHTML='<form id="verification-request-form" class="post-composer"><label>Verification type</label><select name="verification_type"><option value="account">Verified account</option><option value="business">Verified business</option><option value="group">Verified group</option></select><label>Why should this profile be verified?</label><textarea name="explanation" maxlength="1200" rows="4" required></textarea><label>Proof attachment</label><input name="proof" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" required><p class="attachment-hint">PNG, JPG, WebP, or PDF · maximum 600 KB.</p><button class="publish-post" type="submit">Submit request</button><p class="composer-error" role="alert"></p></form>'}catch(e){root.textContent=e.message}
+}
+async function submitVerificationRequest(form){
+ const file=form.elements.proof.files?.[0],error=form.querySelector(".composer-error"),button=form.querySelector("button[type=submit]");
+ if(!file||file.size>600*1024||!["image/png","image/jpeg","image/webp","application/pdf"].includes(file.type)){error.textContent="Attach a PNG, JPG, WebP, or PDF file no larger than 600 KB.";return}
+ button.disabled=true;
+ try{const proof=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Could not read proof file."));reader.readAsDataURL(file)});const response=await fetch("/api/verification-requests",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({verification_type:form.elements.verification_type.value,explanation:form.elements.explanation.value,proof,file_name:file.name})});const data=await response.json();if(!response.ok)throw new Error(data.message||"Request failed.");showToast("Verification request submitted.");await loadVerificationPage()}catch(e){error.textContent=e.message;button.disabled=false}
+}
 async function loadProfile(username){
  pageTitle.textContent="Profile";
  try{
@@ -365,7 +378,7 @@ document.addEventListener("change",event=>{
  const files=[...event.target.files];preview.innerHTML=files.map(file=>'<div class="attachment-preview-item"><span>'+escapeHtml(file.name)+'</span><small>'+Math.max(1,Math.round(file.size/1024))+' KB</small></div>').join("");
 });
 document.addEventListener("submit",async event=>{
- if(event.target.id!=="post-composer")return;
+ if(event.target.id==="verification-request-form"){event.preventDefault();if(await requireSignIn())submitVerificationRequest(event.target);return}\n if(event.target.id!=="post-composer")return;
  event.preventDefault();
  if(!await requireSignIn())return;
  const form=event.target,button=form.querySelector('[type="submit"]'),errorBox=form.querySelector("#post-composer-error");
@@ -406,4 +419,4 @@ document.addEventListener("submit",async event=>{if(event.target.id==="profile-e
 document.addEventListener("change",event=>{if(event.target.name==="profile_picture_file"){const form=event.target.form;if(form)form.dataset.removePhoto="false";const file=event.target.files?.[0];if(file){const preview=document.querySelector("#profile-photo-preview");if(preview)preview.textContent=file.name}}});
 document.addEventListener("keydown",event=>{if(event.key==="Escape"){document.querySelector("#auth-modal").hidden=true;closeProfileEditor()}});
 async function sendPresenceHeartbeat(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{await fetch("/api/presence/heartbeat",{method:"POST",headers:{authorization:"Bearer "+token,accept:"application/json"},credentials:"same-origin"})}catch{}}sendPresenceHeartbeat();setInterval(sendPresenceHeartbeat,30000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)sendPresenceHeartbeat()});if(location.pathname==="/u2"){beginSignIn(2)}else if(location.pathname==="/u1"||location.pathname==="/u0"){beginSignIn(0)}else if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
-else{let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match){const recommendations=document.querySelector("#recommendations");if(recommendations)recommendations.hidden=true;restoreSignIn().then(()=>loadProfile(match[1]))}else if(decodedPath==="/search"){restoreSignIn().finally(()=>loadSearch(new URLSearchParams(location.search).get("q")||""))}else if(decodedPath==="/explore"){location.replace("/search")}else{restoreSignIn().finally(()=>loadHome())}}
+else if(location.pathname==="/verify"){restoreSignIn().finally(loadVerificationPage)}else{let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match){const recommendations=document.querySelector("#recommendations");if(recommendations)recommendations.hidden=true;restoreSignIn().then(()=>loadProfile(match[1]))}else if(decodedPath==="/search"){restoreSignIn().finally(()=>loadSearch(new URLSearchParams(location.search).get("q")||""))}else if(decodedPath==="/explore"){location.replace("/search")}else{restoreSignIn().finally(()=>loadHome())}}
