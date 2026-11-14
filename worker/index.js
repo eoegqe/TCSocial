@@ -304,7 +304,7 @@ export default {
         if(user.verified)return json({error:"already_verified",message:"This account is already verified."},409);
         const existing=await env.TC.prepare("SELECT id FROM social_verification_requests WHERE user_id=? AND status='pending' LIMIT 1").bind(user.id).first();if(existing)return json({error:"request_pending",message:"You already have a pending verification request."},409);
         const body=await request.json().catch(()=>null);if(!body||!["account","business","group"].includes(body.verification_type))return json({error:"invalid_request"},400);
-        const explanation=String(body.explanation||"").trim(),fileName=String(body.file_name||"proof").replace(/[\/\\x00-\x1f]/g,"_").slice(0,120),proof=String(body.proof||"");
+        const explanation=String(body.explanation||"").trim(),fileName=String(body.file_name||"proof").replaceAll("/","_").replaceAll(String.fromCharCode(92),"_").slice(0,120),proof=String(body.proof||"");
         if(explanation.length<20||explanation.length>1200)return json({error:"invalid_explanation",message:"Explain your request in 20–1,200 characters."},400);
         const uploaded=proof.match(/^data:(image\/(?:png|jpeg|webp)|application\/pdf);base64,([A-Za-z0-9+/]+={0,2})$/);if(!uploaded)return json({error:"invalid_proof",message:"Attach a PNG, JPG, WebP, or PDF proof file."},400);
         let decoded;try{decoded=atob(uploaded[2])}catch{return json({error:"invalid_proof"},400)}if(decoded.length>600*1024)return json({error:"proof_too_large",message:"Proof files must be 600 KB or smaller."},413);
