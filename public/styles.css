@@ -371,3 +371,18 @@ h1,h2,h3,p{margin-top:0}
   .site-footer{padding-bottom:90px}
 }
 @media(prefers-reduced-motion:reduce){.app-sidebar{transition:none}}
+
+/* Navigation is mobile-only; preserve the desktop page layout. */
+@media(min-width:761px){
+  .mobile-menu-toggle,.mobile-menu-back,.mobile-bottom-nav{display:none!important}
+  .app-sidebar{display:none!important}
+  .layout{grid-template-columns:minmax(0,1fr) 270px!important;gap:22px!important}
+}
+@media(max-width:760px){
+  .app-sidebar{display:none!important;position:fixed!important;top:0!important;right:auto!important;bottom:0!important;left:0!important;inset:0 auto 0 0!important;width:min(290px,82vw)!important;max-width:290px!important;height:100dvh!important;max-height:100dvh!important;box-sizing:border-box!important;flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;gap:8px!important;margin:0!important;padding:18px 14px calc(18px + env(safe-area-inset-bottom))!important;overflow-y:auto!important;overflow-x:hidden!important;border:0!important;border-right:1px solid #333!important;border-radius:0!important;background:#101010!important;box-shadow:18px 0 55px #0009!important;transform:translateX(-105%)!important;visibility:hidden!important;z-index:100!important}
+  .app-sidebar.menu-open{display:flex!important;transform:translateX(0)!important;visibility:visible!important}
+  .app-sidebar .mobile-menu-back{display:flex!important;flex:0 0 auto!important}
+  .app-sidebar .sidebar-link{display:flex!important;flex:0 0 auto!important;justify-content:flex-start!important;width:100%!important;min-height:46px!important;padding:0 12px!important}
+  .mobile-menu-toggle{display:grid!important}
+  .mobile-bottom-nav{display:flex!important}
+}
