@@ -22,7 +22,8 @@ async function blocked(env,a,b){
 }
 export async function handleMessagingRequest(request,env,url){
  const path=url.pathname,method=request.method;
- const known=path==="/api/messages/me"||path==="/api/keys/self"||path==="/api/keys"||path==="/api/directory"||path==="/api/conversations"||/^\/api\/conversations\/[a-f0-9-]+\/messages$/i.test(path);
+ const migrationMatch=path.match(/^\/api\/conversations\/([a-f0-9-]+)\/messages\/([a-f0-9-]+)\/encrypt$/i);
+ const known=path==="/api/messages/me"||path==="/api/keys/self"||path==="/api/keys"||path==="/api/directory"||path==="/api/conversations"||/^\/api\/conversations\/[a-f0-9-]+\/messages$/i.test(path)||Boolean(migrationMatch);
  if(!known)return null;
  const signed=await auth(request,env);if(signed.response)return signed.response;
  const user=signed.user;
@@ -76,6 +77,20 @@ export async function handleMessagingRequest(request,env,url){
   const insert=env.TC.prepare("INSERT INTO tc_chat_participants(conversation_id,user_id,joined_at) VALUES(?,?,?)");
   await env.TC.batch(ids.map(pid=>insert.bind(cid,pid,timestamp)));
   return json({conversation_id:cid,existing:false},201);
+ }
+ if(migrationMatch&&method==="POST"){
+  const [,cid,mid]=migrationMatch,conversation=await participant(env,cid,user.id);
+  if(!conversation)return fail("conversation_not_found","This conversation is unavailable.",404);
+  let body;try{body=await request.json()}catch{return fail("invalid_json","The request body must be valid JSON.",400)}
+  const payload=typeof body?.encrypted_payload==="string"?body.encrypted_payload:"";
+  if(!payload||payload.length>30000)return fail("encrypted_message_required","The replacement must be encrypted on your device.",400);
+  let envelope;try{envelope=JSON.parse(payload)}catch{return fail("invalid_envelope","The encrypted message envelope is invalid.",400)}
+  if(envelope?.version!==1||envelope?.algorithm!=="RSA-OAEP-256+A256GCM"||typeof envelope.iv!=="string"||typeof envelope.ciphertext!=="string"||!envelope.wrapped_keys||typeof envelope.wrapped_keys!=="object"||Array.isArray(envelope.wrapped_keys))return fail("invalid_envelope","The encrypted message envelope is invalid.",400);
+  const participants=await env.TC.prepare("SELECT user_id FROM tc_chat_participants WHERE conversation_id=?").bind(cid).all(),ids=(participants.results||[]).map(x=>String(x.user_id));
+  if(ids.length<2||Object.keys(envelope.wrapped_keys).length!==ids.length||ids.some(id=>typeof envelope.wrapped_keys[id]!=="string"))return fail("missing_recipient_key","The replacement must be encrypted for every participant.",400);
+  const updated=await env.TC.prepare("UPDATE tc_chat_messages SET body='',encrypted_payload=? WHERE id=? AND conversation_id=? AND encrypted_payload IS NULL AND deleted_at IS NULL").bind(payload,mid,cid).run();
+  if(!updated.meta?.changes)return fail("message_not_migratable","This message is already encrypted or unavailable.",409);
+  return json({success:true});
  }
  const match=path.match(/^\/api\/conversations\/([a-f0-9-]+)\/messages$/i);
  if(match){
