@@ -286,3 +286,9 @@ h1,h2,h3,p{margin-top:0}
 .profile-name-row .profile-name{position:relative;width:max-content;max-width:100%;padding-right:24px;box-sizing:border-box}
 .profile-name-row .profile-name>.verified-mark{position:absolute;left:calc(100% - 21px);top:50%;transform:translateY(-50%);margin:0}
 .profile-name-row .profile-name>.verified-mark+.verified-mark{left:calc(100% - 2px)}
+
+.profile-actions{display:flex;flex:0 0 auto;flex-direction:column;align-items:flex-start;gap:8px;margin-top:10px}
+.profile-actions .profile-follow-button{border:1px solid #f4f4f4;background:#f4f4f4;color:#111;border-radius:7px;font-weight:700}
+.profile-actions .profile-follow-button:hover{background:#ddd;border-color:#ddd}
+.profile-actions .profile-edit-button,.profile-actions>[data-verify-type]{margin:0}
+@media(max-width:760px){.profile-actions{align-items:center;margin-top:0}}
