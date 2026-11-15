@@ -282,3 +282,7 @@ h1,h2,h3,p{margin-top:0}
 
 .profile-name-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;min-width:0}.profile-name-row .profile-name{margin:0}.profile-name-row [data-follow]{border:1px solid #f4f4f4;background:#f4f4f4;color:#111;border-radius:7px;padding:7px 13px;font:700 11px "DM Sans",sans-serif;cursor:pointer}.profile-name-row [data-follow]:hover{background:#ddd;border-color:#ddd}.profile-name-row [data-follow]:disabled{opacity:.6;cursor:wait}
 @media(max-width:760px){.profile-name-row{justify-content:center}}
+
+.profile-name-row .profile-name{position:relative;width:max-content;max-width:100%;padding-right:24px;box-sizing:border-box}
+.profile-name-row .profile-name>.verified-mark{position:absolute;left:calc(100% - 21px);top:50%;transform:translateY(-50%);margin:0}
+.profile-name-row .profile-name>.verified-mark+.verified-mark{left:calc(100% - 2px)}
