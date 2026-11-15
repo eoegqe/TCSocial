@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "Theegget's Social",
+  "short_name": "Social",
+  "description": "Theegget's Social — a social platform by Theegget Creations™",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090909",
+  "theme_color": "#090909",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
