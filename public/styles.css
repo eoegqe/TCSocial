@@ -157,3 +157,15 @@ h1,h2,h3,p{margin-top:0}
 .page-creator>div a{color:#f4f4f4;text-decoration:none;font-size:13px;font-weight:600}
 .page-creator>div small{color:#888;font-size:11px}
 .page-creator .avatar{width:38px;height:38px;flex:none}
+
+.create-page-card{max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain}
+#create-page-form{display:grid;gap:9px}
+#create-page-form label{font-size:11px;font-weight:700;color:#ccc;margin-top:7px}
+#create-page-form input:not([type=file]),#create-page-form textarea{width:100%;border:1px solid #343434;border-radius:9px;background:linear-gradient(145deg,#101010,#0b0b0b);color:#f4f4f4;padding:12px 13px;font:13px/1.55 "DM Sans",sans-serif;outline:none;transition:border-color .16s,box-shadow .16s,background .16s}
+#create-page-form textarea{min-height:100px;resize:vertical}
+#create-page-form input:focus,#create-page-form textarea:focus{border-color:#aaa;box-shadow:0 0 0 3px #ffffff12;background:#111}
+#create-page-form input::placeholder,#create-page-form textarea::placeholder{color:#666}
+#create-page-form input[type=file]{width:100%;padding:10px;border:1px dashed #444;border-radius:9px;background:#0c0c0c;color:#aaa;font:11px "DM Sans",sans-serif}
+.create-page-icon-preview{width:76px;height:76px;border:1px solid #333;border-radius:18px;background:#0b0b0b;display:grid;place-items:center;overflow:hidden;color:#777;font-size:10px}
+.create-page-icon-preview img{width:100%;height:100%;object-fit:cover}
+.optional-label{font-size:10px;font-weight:500;color:#888;margin-left:5px}
