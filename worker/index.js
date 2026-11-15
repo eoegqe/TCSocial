@@ -4,7 +4,7 @@ const notFound=()=>json({error:"not_found"},404);
 const publicPicture=(value,username)=>String(value||"").startsWith("upload:")?"/api/avatar/"+encodeURIComponent(username):value;
 const bannerVersion=value=>{let hash=2166136261;for(let i=0;i<value.length;i++)hash=Math.imul(hash^value.charCodeAt(i),16777619);return (hash>>>0).toString(36)};
 const publicBanner=(value,username)=>String(value||"").startsWith("upload:")?"/api/banner/"+encodeURIComponent(username)+"?v="+bannerVersion(String(value)):value;
-const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),social_links:(()=>{try{return JSON.parse(row.social_links||"{}")}catch{return {}}})(),verified:Boolean(row.verified),verification_type:row.verification_type||"account",is_tc_staff:Boolean(row.is_tc_staff),is_private:Boolean(row.is_private),is_banned:row.status==="banned"});
+const safeUser=row=>({username:row.username,ban_reason:row.ban_reason||"",display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),social_links:(()=>{try{return JSON.parse(row.social_links||"{}")}catch{return {}}})(),verified:Boolean(row.verified),verification_type:row.verification_type||"account",is_tc_staff:Boolean(row.is_tc_staff),is_private:Boolean(row.is_private),is_banned:row.status==="banned"});
 const publicPosts=rows=>(rows||[]).map(row=>({...row,profile_picture:publicPicture(row.profile_picture,row.username)}));
 const mediaSelect="COALESCE((SELECT json_group_array(json_object('id',m.id,'url','/api/media/'||m.id,'file_name',m.file_name,'mime_type',m.mime_type,'media_kind',m.media_kind,'file_size',m.file_size)) FROM social_post_media m WHERE m.post_id=p.id),'[]') AS attachments,";
 export default {
@@ -525,7 +525,7 @@ export default {
           const accountStatusResponse=await fetch("https://accounts.theegget.com/api/public/account-status/"+user.id,{cf:{cacheTtl:0}});
           if(accountStatusResponse.ok){
             const accountStatus=await accountStatusResponse.json();
-            if(accountStatus.is_banned)user.status="banned";
+            if(accountStatus.is_banned){user.status="banned";user.ban_reason=String(accountStatus.ban_reason||"").slice(0,240)}
           }
         }catch(error){console.error("Social account ban status lookup failed",String(error?.message||error))}
         if(user.is_private&&user.status!=="banned"){
