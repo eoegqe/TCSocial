@@ -3,7 +3,7 @@ const notFound=()=>json({error:"not_found"},404);
 const publicPicture=(value,username)=>String(value||"").startsWith("upload:")?"/api/avatar/"+encodeURIComponent(username):value;
 const bannerVersion=value=>{let hash=2166136261;for(let i=0;i<value.length;i++)hash=Math.imul(hash^value.charCodeAt(i),16777619);return (hash>>>0).toString(36)};
 const publicBanner=(value,username)=>String(value||"").startsWith("upload:")?"/api/banner/"+encodeURIComponent(username)+"?v="+bannerVersion(String(value)):value;
-const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),social_links:(()=>{try{return JSON.parse(row.social_links||"{}")}catch{return {}}})(),verified:Boolean(row.verified),verification_type:row.verification_type||"account",is_tc_staff:Boolean(row.is_tc_staff),is_private:Boolean(row.is_private)});
+const safeUser=row=>({username:row.username,display_name:row.display_name,bio:row.bio,profile_picture:publicPicture(row.profile_picture,row.username),banner_image:publicBanner(row.banner_image,row.username),social_links:(()=>{try{return JSON.parse(row.social_links||"{}")}catch{return {}}})(),verified:Boolean(row.verified),verification_type:row.verification_type||"account",is_tc_staff:Boolean(row.is_tc_staff),is_private:Boolean(row.is_private),is_banned:row.status==="banned"});
 const publicPosts=rows=>(rows||[]).map(row=>({...row,profile_picture:publicPicture(row.profile_picture,row.username)}));
 const mediaSelect="COALESCE((SELECT json_group_array(json_object('id',m.id,'url','/api/media/'||m.id,'file_name',m.file_name,'mime_type',m.mime_type,'media_kind',m.media_kind,'file_size',m.file_size)) FROM social_post_media m WHERE m.post_id=p.id),'[]') AS attachments,";
 export default {
@@ -493,7 +493,7 @@ export default {
       const username=decodeURIComponent(parts[2]||"").replace(/^@/,"");
       if(!username||username.length>64)return json({error:"invalid_username"},400);
       try{
-        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,social_links,verified,verification_type,is_tc_staff,is_private,last_heartbeat_at FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+        const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,social_links,verified,verification_type,is_tc_staff,is_private,last_heartbeat_at,status FROM users WHERE username=? COLLATE NOCASE AND status IN ('active','banned') LIMIT 1").bind(username).first();
         if(!user){
           const page=await env.TC.prepare("SELECT id,handle,display_name,bio,profile_picture,banner_image,verified,verification_type,is_tc_staff,owner_user_id FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
@@ -520,7 +520,7 @@ export default {
           }
           return notFound();
         }
-        if(user.is_private){
+        if(user.is_private&&user.status!=="banned"){
           let canView=false;
           const authorization=request.headers.get("authorization")||"",viewerToken=authorization.match(/^Bearer\s+(.+)$/i);
           if(viewerToken){
