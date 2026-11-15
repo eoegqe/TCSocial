@@ -42,6 +42,6 @@
     </section>
   </div>
   <div id="toast" class="toast" role="status"></div>
-<script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}))}</script>
+<script>window.addEventListener("load",()=>{window.lucide?.createIcons();const home=document.querySelector("[data-sidebar-home]");if(home&&location.pathname==="/")home.classList.add("active")});if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}))}</script>
 </body>
 </html>
