@@ -1,5 +1,6 @@
 const feed=document.querySelector("#feed");
 const pageTitle=document.querySelector("#page-title");
+for(const key of ["tc_social_access_token","tc_social_user","tc_social_account_slot"]){const oldValue=sessionStorage.getItem(key);if(oldValue!==null&&!localStorage.getItem(key))localStorage.setItem(key,oldValue);sessionStorage.removeItem(key)}
 document.querySelector("#year").textContent=new Date().getFullYear();
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 const initials=value=>String(value||"TC").trim().slice(0,1).toUpperCase();
@@ -7,7 +8,7 @@ const safeMediaUrl=value=>{if(typeof value!=="string"||!value.trim())return "";t
 const verifiedMark=(verified,type="account",staff=false)=>{const icons={account:{name:"badge-check",title:"Verified account",path:'<path d="M3.85 8.62a4 4 0 0 1 4.77-4.77 4 4 0 0 1 6.76 0 4 4 0 0 1 4.77 4.77 4 4 0 0 1 0 6.76 4 4 0 0 1-4.77 4.77 4 4 0 0 1-6.76 0 4 4 0 0 1-4.77-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>'},business:{name:"briefcase-business",title:"Verified business",path:'<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2"/>'},group:{name:"users-round",title:"Verified group",path:'<path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-5.5-7.6M16 3.1a5 5 0 0 1 0 9.8"/>'},ai:{name:"bot",title:"AI account",path:'<path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M9 13v2M15 13v2"/>'}};const render=(icon,kind)=>'<span class="verified-mark verified-'+kind+'" title="'+icon.title+'" data-tooltip="'+icon.title+'" aria-label="'+icon.title+'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon.path+'</svg></span>';const mark=icons[type]||icons.account;return (verified?render(mark,type):"")+(staff?render({title:"TC staff",path:'<path d="m14.7 6.3 3 3"/><path d="M5 21a2 2 0 0 1-2-2l9.6-9.6a5 5 0 0 1 6.4-6.4l-3.1 3.1 2 2 3.1-3.1a5 5 0 0 1-6.4 6.4L7 21z"/>'},"staff"):"")};
 const avatar=(url,name)=>{const safe=safeMediaUrl(url);return safe?'<img class="avatar" src="'+escapeHtml(safe)+'" alt="">':'<span class="avatar">'+escapeHtml(initials(name))+'</span>'};
 const time=value=>{const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})};
-async function api(path){const token=sessionStorage.getItem("tc_social_access_token");const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),15000);try{const response=await fetch(path,{headers:{accept:"application/json",...(token?{authorization:"Bearer "+token}:{})},credentials:"same-origin",signal:controller.signal});const data=await response.json().catch(()=>({}));if(!response.ok){const error=new Error(data.message||"Request failed");error.status=response.status;error.code=data.error;error.confidence=data.confidence;throw error}return data}catch(error){if(error.name==="AbortError")throw new Error("The server took too long to respond. Please try again.");throw error}finally{clearTimeout(timeout)}}
+async function api(path){const token=localStorage.getItem("tc_social_access_token");const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),15000);try{const response=await fetch(path,{headers:{accept:"application/json",...(token?{authorization:"Bearer "+token}:{})},credentials:"same-origin",signal:controller.signal});const data=await response.json().catch(()=>({}));if(!response.ok){const error=new Error(data.message||"Request failed");error.status=response.status;error.code=data.error;error.confidence=data.confidence;throw error}return data}catch(error){if(error.name==="AbortError")throw new Error("The server took too long to respond. Please try again.");throw error}finally{clearTimeout(timeout)}}
 
 const OAUTH_REDIRECT_URI=location.origin+"/auth/callback";
 const bytesToBase64Url=bytes=>{let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"")};
@@ -45,24 +46,24 @@ async function updateSignInState(user){
  if(dropdown){dropdown.querySelector("[data-view-account-page]").href="/@"+encodeURIComponent(username);dropdown.hidden=true}
 }
 async function requireSignIn(){
- const token=sessionStorage.getItem("tc_social_access_token");
+ const token=localStorage.getItem("tc_social_access_token");
  if(token){
   try{
-   const authSlot=Number(sessionStorage.getItem("tc_social_account_slot")||0);const response=await fetch("https://accounts.theegget.com/oauth/userinfo"+(authSlot>=2?"/u"+authSlot:""),{headers:{authorization:"Bearer "+token,accept:"application/json"}});
+   const authSlot=Number(localStorage.getItem("tc_social_account_slot")||0);const response=await fetch("https://accounts.theegget.com/oauth/userinfo"+(authSlot>=2?"/u"+authSlot:""),{headers:{authorization:"Bearer "+token,accept:"application/json"}});
    const user=await response.json().catch(()=>null);
-   if(response.ok&&user?.sub&&user?.preferred_username){sessionStorage.setItem("tc_social_user",JSON.stringify(user));await updateSignInState(user);return true}
+   if(response.ok&&user?.sub&&user?.preferred_username){localStorage.setItem("tc_social_user",JSON.stringify(user));await updateSignInState(user);return true}
   }catch{}
-  sessionStorage.removeItem("tc_social_access_token");
-  sessionStorage.removeItem("tc_social_user");
+  localStorage.removeItem("tc_social_access_token");
+  localStorage.removeItem("tc_social_user");
  }
  await updateSignInState(null);
  document.querySelector("#auth-modal").hidden=false;
  return false;
 }
-async function restoreSignIn(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{const authSlot=Number(sessionStorage.getItem("tc_social_account_slot")||0);const response=await fetch("https://accounts.theegget.com/oauth/userinfo"+(authSlot>=2?"/u"+authSlot:""),{headers:{authorization:"Bearer "+token,accept:"application/json"}});if(!response.ok)throw new Error("expired");const user=await response.json();sessionStorage.setItem("tc_social_user",JSON.stringify(user));updateSignInState(user)}catch{sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user");updateSignInState(null)}}
+async function restoreSignIn(){const token=localStorage.getItem("tc_social_access_token");if(!token)return;try{const authSlot=Number(localStorage.getItem("tc_social_account_slot")||0);const response=await fetch("https://accounts.theegget.com/oauth/userinfo"+(authSlot>=2?"/u"+authSlot:""),{headers:{authorization:"Bearer "+token,accept:"application/json"}});if(!response.ok)throw new Error("expired");const user=await response.json();localStorage.setItem("tc_social_user",JSON.stringify(user));updateSignInState(user)}catch{localStorage.removeItem("tc_social_access_token");localStorage.removeItem("tc_social_user");updateSignInState(null)}}
 function showToast(message){const toast=document.querySelector("#toast");if(!toast)return;toast.textContent=message;toast.classList.add("show");setTimeout(()=>toast.classList.remove("show"),2600)}
 function showAuthError(message){const modal=document.querySelector("#auth-modal");modal.hidden=false;const description=modal.querySelector("p");if(description)description.textContent=message}
-async function completeSignIn(){const params=new URLSearchParams(location.search),code=params.get("code"),state=params.get("state"),expected=sessionStorage.getItem("tc_social_oauth_state"),verifier=sessionStorage.getItem("tc_social_oauth_verifier"),authSlot=Number(sessionStorage.getItem("tc_social_oauth_slot")||0),slotSuffix=authSlot>=2?"/u"+authSlot:"";if(params.has("error"))throw new Error(params.get("error")==="access_denied"?"You cancelled Theegget's Social sign-in.":"TC Accounts could not authorize this sign-in.");if(!code||!state||!expected||state!==expected||!verifier)throw new Error("The sign-in response could not be verified. Please try again.");const config=await api("/api/auth/config");if(!config.client_id)throw new Error("Theegget's Social's OAuth client ID has not been configured yet.");const response=await fetch("https://accounts.theegget.com/oauth/token"+slotSuffix,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","accept":"application/json"},body:new URLSearchParams({grant_type:"authorization_code",code,client_id:config.client_id,redirect_uri:OAUTH_REDIRECT_URI,code_verifier:verifier})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.access_token)throw new Error(data.error_description||data.error||"TC Accounts could not complete sign-in.");sessionStorage.setItem("tc_social_access_token",data.access_token);sessionStorage.setItem("tc_social_account_slot",String(authSlot));const userResponse=await fetch("https://accounts.theegget.com/oauth/userinfo"+slotSuffix,{headers:{authorization:"Bearer "+data.access_token,accept:"application/json"}});const user=await userResponse.json().catch(()=>({}));if(!userResponse.ok||!user.sub)throw new Error("TC Accounts issued a token but could not confirm the account identity.");sessionStorage.setItem("tc_social_user",JSON.stringify(user));updateSignInState(user);sessionStorage.removeItem("tc_social_oauth_slot");sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");const returnTo=sessionStorage.getItem("tc_social_oauth_return")||"/";sessionStorage.removeItem("tc_social_oauth_return");location.replace(returnTo)}
+async function completeSignIn(){const params=new URLSearchParams(location.search),code=params.get("code"),state=params.get("state"),expected=sessionStorage.getItem("tc_social_oauth_state"),verifier=sessionStorage.getItem("tc_social_oauth_verifier"),authSlot=Number(sessionStorage.getItem("tc_social_oauth_slot")||0),slotSuffix=authSlot>=2?"/u"+authSlot:"";if(params.has("error"))throw new Error(params.get("error")==="access_denied"?"You cancelled Theegget's Social sign-in.":"TC Accounts could not authorize this sign-in.");if(!code||!state||!expected||state!==expected||!verifier)throw new Error("The sign-in response could not be verified. Please try again.");const config=await api("/api/auth/config");if(!config.client_id)throw new Error("Theegget's Social's OAuth client ID has not been configured yet.");const response=await fetch("https://accounts.theegget.com/oauth/token"+slotSuffix,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","accept":"application/json"},body:new URLSearchParams({grant_type:"authorization_code",code,client_id:config.client_id,redirect_uri:OAUTH_REDIRECT_URI,code_verifier:verifier})});const data=await response.json().catch(()=>({}));if(!response.ok||!data.access_token)throw new Error(data.error_description||data.error||"TC Accounts could not complete sign-in.");localStorage.setItem("tc_social_access_token",data.access_token);localStorage.setItem("tc_social_account_slot",String(authSlot));const userResponse=await fetch("https://accounts.theegget.com/oauth/userinfo"+slotSuffix,{headers:{authorization:"Bearer "+data.access_token,accept:"application/json"}});const user=await userResponse.json().catch(()=>({}));if(!userResponse.ok||!user.sub)throw new Error("TC Accounts issued a token but could not confirm the account identity.");localStorage.setItem("tc_social_user",JSON.stringify(user));updateSignInState(user);sessionStorage.removeItem("tc_social_oauth_slot");sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");const returnTo=sessionStorage.getItem("tc_social_oauth_return")||"/";sessionStorage.removeItem("tc_social_oauth_return");location.replace(returnTo)}
 
 function renderPost(post){
  const name=post.display_name||"@"+post.username;
@@ -72,7 +73,7 @@ function renderPost(post){
  return '<article class="post" data-post-id="'+escapeHtml(post.id)+'"><div class="post-head">'+avatar(post.profile_picture,name)+'<div class="post-author"><a href="/@'+encodeURIComponent(post.username)+'">'+escapeHtml(name)+verifiedMark(post.verified,post.verification_type,post.is_tc_staff)+'</a><small>@'+escapeHtml(post.username)+' · '+escapeHtml(time(post.created_at))+'</small></div></div>'+(post.content?'<p class="post-content">'+escapeHtml(post.content)+'</p>':"")+media+legacy+'<div class="post-actions"><button class="post-action" data-react aria-pressed="false">Like <span data-reaction-count>'+Number(post.reaction_count||0)+'</span></button><button class="post-action" data-comments-toggle aria-expanded="false">Comments <span data-comment-count>'+Number(post.comment_count||0)+'</span></button></div><section class="comments-panel" data-comments-panel hidden><div class="comments-list" data-comments-list></div><form class="comment-form"><textarea name="content" maxlength="1000" rows="2" placeholder="Write a comment…" required></textarea><div><span>1,000 characters max</span><button class="post-action" type="submit">Comment</button></div><p class="comment-error" role="alert"></p></form></section></article>';
 }
 async function loadPostMedia(root){
- const token=sessionStorage.getItem("tc_social_access_token");
+ const token=localStorage.getItem("tc_social_access_token");
  await Promise.all([...root.querySelectorAll("[data-media-url]")].map(async element=>{
   const url=element.dataset.mediaUrl;if(!url)return;
   try{
@@ -84,7 +85,7 @@ async function loadPostMedia(root){
  }));
 }
 async function loadPostReactionStates(root){
- const token=sessionStorage.getItem("tc_social_access_token");
+ const token=localStorage.getItem("tc_social_access_token");
  const posts=[...root.querySelectorAll("[data-post-id]")];
  await Promise.all(posts.map(async post=>{
   try{
@@ -137,7 +138,7 @@ async function loadHome(){
  pageTitle.textContent="Home";
  const aside=document.querySelector("#recommendations");if(aside){aside.hidden=false;aside.innerHTML='<div class="recommendation-heading"><span class="eyebrow">DISCOVER</span><h3>Recommended</h3></div><div class="loading"><span class="spinner"></span></div>'}
  feed.innerHTML='<div class="loading"><span class="spinner"></span><p>Loading your feed…</p></div>';
- const signedIn=Boolean(sessionStorage.getItem("tc_social_access_token"));
+ const signedIn=Boolean(localStorage.getItem("tc_social_access_token"));
  loadRecommendations();
  try{
   const data=await api("/api/feed"),posts=data.posts||[];
@@ -208,7 +209,7 @@ function openProfileEditor(profile){
  modal.querySelector('[name="display_name"]').focus();
 }
 async function saveProfileEditor(form){
- const token=sessionStorage.getItem("tc_social_access_token");
+ const token=localStorage.getItem("tc_social_access_token");
  const errorBox=document.querySelector("#profile-editor-error");
  const submit=form.querySelector('[type="submit"]');
  submit.disabled=true;submit.textContent="Saving…";errorBox.textContent="";
@@ -231,11 +232,11 @@ async function saveProfileEditor(form){
   showToast(isPage?"Subaccount updated.":"Profile updated.");
   history.replaceState({}, "", "/@"+encodeURIComponent(data.profile.username));
   loadProfile(data.profile.username);
-  const user=JSON.parse(sessionStorage.getItem("tc_social_user")||"null");
+  const user=JSON.parse(localStorage.getItem("tc_social_user")||"null");
   if(!isPage&&user&&String(user.preferred_username||"").toLowerCase()===String(data.profile.username).toLowerCase()){
    user.picture=data.profile.profile_picture||"";
    user.display_name=data.profile.display_name||user.display_name;
-   sessionStorage.setItem("tc_social_user",JSON.stringify(user));
+   localStorage.setItem("tc_social_user",JSON.stringify(user));
    updateSignInState(user);
   }
  }catch(error){errorBox.textContent=error.message;submit.disabled=false;submit.textContent="Save changes"}
@@ -245,14 +246,14 @@ async function loadVerificationPage(){
  pageTitle.textContent="Request verification";
  feed.innerHTML='<section class="profile-card"><span class="eyebrow">THEEGGET&#39;S SOCIAL</span><h1 class="profile-name">Request verification</h1><p class="bio">Choose a verification type and attach proof supporting your request. Proof is only visible to TC reviewers.</p><div id="verification-request-content"></div></section>';
  const root=document.querySelector("#verification-request-content");
- if(!sessionStorage.getItem("tc_social_access_token")){root.innerHTML='<p>Sign in with TC to continue.</p><a href="#" data-tc-signin>Sign in with TC</a>';return}
+ if(!localStorage.getItem("tc_social_access_token")){root.innerHTML='<p>Sign in with TC to continue.</p><a href="#" data-tc-signin>Sign in with TC</a>';return}
  try{const status=await api("/api/verification-requests");if(status.verified){root.textContent="This account is already verified. You cannot submit another request.";return}if(status.request){root.textContent="Your request is "+status.request.status+".";return}root.innerHTML='<form id="verification-request-form" class="post-composer"><label>Verification type</label><select name="verification_type"><option value="account">Verified account</option><option value="business">Verified business</option><option value="group">Verified group</option></select><label>Why should this profile be verified?</label><textarea name="explanation" maxlength="1200" rows="4" required></textarea><label>Proof attachment</label><input name="proof" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" required><p class="attachment-hint">PNG, JPG, WebP, or PDF · maximum 600 KB.</p><button class="publish-post" type="submit">Submit request</button><p class="composer-error" role="alert"></p></form>'}catch(e){root.textContent=e.message}
 }
 async function submitVerificationRequest(form){
  const file=form.elements.proof.files?.[0],error=form.querySelector(".composer-error"),button=form.querySelector("button[type=submit]");
  if(!file||file.size>600*1024||!["image/png","image/jpeg","image/webp","application/pdf"].includes(file.type)){error.textContent="Attach a PNG, JPG, WebP, or PDF file no larger than 600 KB.";return}
  button.disabled=true;
- try{const proof=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Could not read proof file."));reader.readAsDataURL(file)});const response=await fetch("/api/verification-requests",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({verification_type:form.elements.verification_type.value,explanation:form.elements.explanation.value,proof,file_name:file.name})});const data=await response.json();if(!response.ok)throw new Error(data.message||"Request failed.");showToast("Verification request submitted.");await loadVerificationPage()}catch(e){error.textContent=e.message;button.disabled=false}
+ try{const proof=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Could not read proof file."));reader.readAsDataURL(file)});const response=await fetch("/api/verification-requests",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+localStorage.getItem("tc_social_access_token")},body:JSON.stringify({verification_type:form.elements.verification_type.value,explanation:form.elements.explanation.value,proof,file_name:file.name})});const data=await response.json();if(!response.ok)throw new Error(data.message||"Request failed.");showToast("Verification request submitted.");await loadVerificationPage()}catch(e){error.textContent=e.message;button.disabled=false}
 }
 async function loadProfile(username){
  pageTitle.textContent="Profile";
@@ -260,13 +261,13 @@ async function loadProfile(username){
   const data=await api("/api/profile/"+encodeURIComponent(username));
   const p=data.profile;
   const name=p.display_name||"@"+p.username;
-  const canEdit=Boolean(p.can_manage||p.can_edit)||(!p.is_page&&String(JSON.parse(sessionStorage.getItem("tc_social_user")||"null")?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase());
-  const signedInUser=JSON.parse(sessionStorage.getItem("tc_social_user")||"null");
+  const canEdit=Boolean(p.can_manage||p.can_edit)||(!p.is_page&&String(JSON.parse(localStorage.getItem("tc_social_user")||"null")?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase());
+  const signedInUser=JSON.parse(localStorage.getItem("tc_social_user")||"null");
   const isOwnProfile=!p.is_page&&String(signedInUser?.preferred_username||"").toLowerCase()===String(p.username).toLowerCase();
   const followButton=p.is_page||!isOwnProfile?'<button class="post-action" data-follow="'+escapeHtml(p.username)+'" aria-pressed="false">Follow</button>':"";
   const aboutSection=p.is_page?'<div class="page-about-wrap"><button class="post-action page-about-toggle" type="button" data-about-toggle aria-expanded="false">About</button><section class="page-about" data-page-about hidden>'+(p.creator?'<div class="page-creator">'+avatar(p.creator.profile_picture,p.creator.display_name)+'<div><span class="eyebrow">CREATED BY</span><a href="/@'+encodeURIComponent(p.creator.username)+'">'+escapeHtml(p.creator.display_name)+'</a><small>@'+escapeHtml(p.creator.username)+'</small></div><a class="post-action" href="/@'+encodeURIComponent(p.creator.username)+'">View profile & follow</a></div>':'<p class="editor-hint">Creator information is not available.</p>')+'</section></div>':"";
   feed.innerHTML='<section class="profile-card">'+(p.banner_image?'<div class="profile-banner"><img src="'+escapeHtml(safeMediaUrl(p.banner_image))+'" alt="'+escapeHtml(name)+' banner"></div>':"")+'<div class="profile-top">'+avatar(p.profile_picture,name)+'<div><h1 class="profile-name">'+escapeHtml(name)+verifiedMark(p.verified,p.verification_type,p.is_tc_staff)+'</h1><span class="handle">@'+escapeHtml(p.username)+'</span><span class="follower-count" data-follower-count>'+Number(p.follower_count||0).toLocaleString()+' followers</span></div>'+(canEdit?'<button class="post-action profile-edit-button" data-edit-profile>Edit</button>':"")+followButton+(p.can_verify?'<button class="post-action" data-verify-type="'+(p.is_page?"page":"user")+'" data-verify-name="'+escapeHtml(p.username)+'" data-verified="'+String(Boolean(p.verified))+'" data-staff="'+String(Boolean(p.is_tc_staff))+'">'+"Manage verification"+'</button>':"")+'</div>'+(p.bio?'<p class="bio">'+escapeHtml(p.bio)+'</p>':"")+(p.social_links&&Object.keys(p.social_links).length?'<nav class="profile-social-links" aria-label="Social profiles">'+Object.entries(p.social_links).map(([key,item])=>{const url=typeof item==="string"?item:item?.url;const label=typeof item==="object"&&item?.label?item.label:"My "+(({youtube:"YouTube",instagram:"Instagram",tiktok:"TikTok",spotify:"Spotify",twitch:"Twitch",x:"X",website:"Website"})[key]||key);return url?'<a href="'+escapeHtml(safeMediaUrl(url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(label)+'</a>':""}).join("")+'</nav>':"")+'</section>'+aboutSection+'<div class="section-heading" style="margin-top:25px"><div><span class="eyebrow">PROFILE POSTS</span><h2>Posts</h2></div></div><div id="profile-posts" class="feed"><div class="loading"><span class="spinner"></span></div></div>';
-  if(followButton&&sessionStorage.getItem("tc_social_access_token")){
+  if(followButton&&localStorage.getItem("tc_social_access_token")){
    try{const status=await api("/api/follow/"+encodeURIComponent(p.username));const follow=feed.querySelector("[data-follow]");if(follow){follow.textContent=status.following?"Following":"Follow";follow.setAttribute("aria-pressed",String(status.following));}}catch{}
   }
   const posts=await api("/api/profile/"+encodeURIComponent(username)+"/posts");
@@ -310,7 +311,7 @@ document.addEventListener("click",async event=>{
    const staffAction=selected==="6";
    const remove=selected==="7";
    if(!verificationType&&!staffAction&&!remove)throw new Error("Invalid verification action.");
-   const response=await fetch("/api/verification",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({type:verify.dataset.verifyType,username:verify.dataset.verifyName,verified:remove?false:!staffAction,verification_type:verificationType||"account",staff:staffAction?verify.dataset.staff!=="true":undefined})});
+   const response=await fetch("/api/verification",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+localStorage.getItem("tc_social_access_token")},body:JSON.stringify({type:verify.dataset.verifyType,username:verify.dataset.verifyName,verified:remove?false:!staffAction,verification_type:verificationType||"account",staff:staffAction?verify.dataset.staff!=="true":undefined})});
    const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not update verification.");
    showToast(staffAction?"TC staff status updated.":remove?"Verification removed.":"Verification updated.");loadProfile(verify.dataset.verifyName);
   }catch(error){showToast(error.message);verify.disabled=false}
@@ -320,7 +321,7 @@ document.addEventListener("click",async event=>{
  const accountToggle=event.target.closest("[data-tc-header-account][aria-expanded]");
  if(accountToggle){event.preventDefault();const dropdown=document.querySelector("[data-account-dropdown]");const opening=dropdown.hidden;dropdown.hidden=!opening;accountToggle.setAttribute("aria-expanded",String(opening));return}
  const logout=event.target.closest("[data-account-logout]");
- if(logout){sessionStorage.removeItem("tc_social_access_token");sessionStorage.removeItem("tc_social_user");sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");location.assign("/");return}
+ if(logout){localStorage.removeItem("tc_social_access_token");localStorage.removeItem("tc_social_user");sessionStorage.removeItem("tc_social_oauth_state");sessionStorage.removeItem("tc_social_oauth_verifier");location.assign("/");return}
  const editProfile=event.target.closest("[data-edit-profile]");
  if(editProfile){try{const username=decodeURIComponent(location.pathname.split("/")[1].replace(/^@/,""));const profile=await api("/api/profile/"+encodeURIComponent(username));openProfileEditor(profile.profile)}catch(error){showToast("Could not load your profile settings.")}return}
  if(!event.target.closest(".account-menu-wrap")){const dropdown=document.querySelector("[data-account-dropdown]");const toggle=document.querySelector("[data-tc-header-account][aria-expanded]");if(dropdown)dropdown.hidden=true;if(toggle)toggle.setAttribute("aria-expanded","false")}
@@ -333,7 +334,7 @@ document.addEventListener("click",async event=>{
   const wasFollowing=follow.getAttribute("aria-pressed")==="true";
   follow.disabled=true;
   try{
-   const response=await fetch("/api/follow/"+encodeURIComponent(username),{method:wasFollowing?"DELETE":"POST",headers:{accept:"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},credentials:"same-origin"});
+   const response=await fetch("/api/follow/"+encodeURIComponent(username),{method:wasFollowing?"DELETE":"POST",headers:{accept:"application/json",authorization:"Bearer "+localStorage.getItem("tc_social_access_token")},credentials:"same-origin"});
    const data=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(data.message||"Could not update follow status.");
    follow.textContent=data.following?"Following":"Follow";
@@ -350,7 +351,7 @@ document.addEventListener("click",async event=>{
   const post=react.closest("[data-post-id]"),was=react.getAttribute("aria-pressed")==="true";
   react.disabled=true;
   try{
-   const response=await fetch("/api/posts/"+post.dataset.postId+"/reactions",{method:was?"DELETE":"POST",headers:{accept:"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")}});
+   const response=await fetch("/api/posts/"+post.dataset.postId+"/reactions",{method:was?"DELETE":"POST",headers:{accept:"application/json",authorization:"Bearer "+localStorage.getItem("tc_social_access_token")}});
    const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not update reaction.");
    react.setAttribute("aria-pressed",String(data.reacted));react.querySelector("[data-reaction-count]").textContent=data.count;react.classList.toggle("is-active",data.reacted);
   }catch(error){showToast(error.message)}finally{react.disabled=false}
@@ -400,7 +401,7 @@ document.addEventListener("submit",async event=>{
  button.disabled=true;button.textContent="Posting…";errorBox.textContent="";
  try{
   const body=new FormData();body.set("content",content);body.set("identity_id",form.elements.identity_id.value||"");for(const file of files)body.append("attachments",file);
-  const response=await fetch("/api/posts",{method:"POST",headers:{accept:"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},credentials:"same-origin",body});
+  const response=await fetch("/api/posts",{method:"POST",headers:{accept:"application/json",authorization:"Bearer "+localStorage.getItem("tc_social_access_token")},credentials:"same-origin",body});
   const data=await response.json().catch(()=>({}));
   if(!response.ok){
    const messages={unauthorized:"Your TC sign-in has expired. Please sign in again.",empty_post:"Write something or attach a file.",post_too_long:"Posts must be 2,000 characters or fewer.",identity_forbidden:"You do not have permission to post as that page.",invalid_identity:"Choose a valid posting identity.",social_account_required:"Your TC account needs an active Theegget's Social profile before posting.",too_many_attachments:"Attach up to 4 files per post.",file_too_large:"Each attachment must be 8 MB or smaller.",attachments_too_large:"All attachments together must be 20 MB or smaller.",unsupported_file:"That file type is not supported."};
@@ -414,7 +415,7 @@ document.addEventListener("submit",async event=>{
  if(event.target.id==="create-page-form"){
   event.preventDefault();if(!await requireSignIn())return;
   const form=event.target,button=form.querySelector('[type="submit"]'),error=document.querySelector("#create-page-error");button.disabled=true;button.textContent="Creating…";error.textContent="";
-  try{const response=await fetch("/api/pages",{method:"POST",headers:{accept:"application/json","content-type":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({display_name:form.elements.display_name.value.trim(),handle:form.elements.handle.value.trim()})});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.message||"Could not create the page.");document.querySelector("#create-page-modal")?.remove();showToast("Page created.");location.href="/@"+encodeURIComponent(data.page.username)}catch(error){document.querySelector("#create-page-error").textContent=error.message;button.disabled=false;button.textContent="Create page"}return;
+  try{const response=await fetch("/api/pages",{method:"POST",headers:{accept:"application/json","content-type":"application/json",authorization:"Bearer "+localStorage.getItem("tc_social_access_token")},body:JSON.stringify({display_name:form.elements.display_name.value.trim(),handle:form.elements.handle.value.trim()})});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.message||"Could not create the page.");document.querySelector("#create-page-modal")?.remove();showToast("Page created.");location.href="/@"+encodeURIComponent(data.page.username)}catch(error){document.querySelector("#create-page-error").textContent=error.message;button.disabled=false;button.textContent="Create page"}return;
  }
  if(event.target.id==="global-search-form"){event.preventDefault();const query=event.target.elements.q.value.trim();if(query.length<2){showToast("Enter at least 2 characters to search.");return}history.replaceState({},"","/?q="+encodeURIComponent(query));pageTitle.textContent="Search results";const aside=document.querySelector("#recommendations");if(aside)aside.hidden=true;feed.innerHTML='<div id="search-results"></div>';runProfileSearch(query);return}
  const form=event.target.closest(".comment-form");
@@ -425,7 +426,7 @@ document.addEventListener("submit",async event=>{
  if(!content){error.textContent="Write a comment first.";return}
  button.disabled=true;error.textContent="";
  try{
-  const response=await fetch("/api/posts/"+post.dataset.postId+"/comments",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+sessionStorage.getItem("tc_social_access_token")},body:JSON.stringify({content})});
+  const response=await fetch("/api/posts/"+post.dataset.postId+"/comments",{method:"POST",headers:{"content-type":"application/json","accept":"application/json",authorization:"Bearer "+localStorage.getItem("tc_social_access_token")},body:JSON.stringify({content})});
   const data=await response.json();if(!response.ok)throw new Error(data.message||"Could not publish comment.");
   const comment=data.comment,list=post.querySelector("[data-comments-list]"),empty=list.querySelector(".no-comments");if(empty)empty.remove();
   list.insertAdjacentHTML("beforeend",'<div class="comment"><strong>'+escapeHtml(comment.display_name||comment.username)+verifiedMark(comment.verified,comment.verification_type,comment.is_tc_staff)+'</strong><small>@'+escapeHtml(comment.username)+' · '+escapeHtml(time(comment.created_at))+'</small><p>'+escapeHtml(comment.content)+'</p></div>');
@@ -436,5 +437,5 @@ document.addEventListener("input",event=>{if(event.target.id==="post-content"){c
 document.addEventListener("submit",async event=>{if(event.target.id==="profile-editor-form"){event.preventDefault();if(await requireSignIn())saveProfileEditor(event.target)}});
 document.addEventListener("change",event=>{if(event.target.name==="profile_picture_file"){const form=event.target.form;if(form)form.dataset.removePhoto="false";const file=event.target.files?.[0];if(file){const preview=document.querySelector("#profile-photo-preview");if(preview)preview.textContent=file.name}}});
 document.addEventListener("keydown",event=>{if(event.key==="Escape"){document.querySelector("#auth-modal").hidden=true;closeProfileEditor()}});
-async function sendPresenceHeartbeat(){const token=sessionStorage.getItem("tc_social_access_token");if(!token)return;try{await fetch("/api/presence/heartbeat",{method:"POST",headers:{authorization:"Bearer "+token,accept:"application/json"},credentials:"same-origin"})}catch{}}sendPresenceHeartbeat();setInterval(sendPresenceHeartbeat,30000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)sendPresenceHeartbeat()});if(location.pathname==="/u2"){beginSignIn(2)}else if(location.pathname==="/u1"||location.pathname==="/u0"){beginSignIn(0)}else if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
+async function sendPresenceHeartbeat(){const token=localStorage.getItem("tc_social_access_token");if(!token)return;try{await fetch("/api/presence/heartbeat",{method:"POST",headers:{authorization:"Bearer "+token,accept:"application/json"},credentials:"same-origin"})}catch{}}sendPresenceHeartbeat();setInterval(sendPresenceHeartbeat,30000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)sendPresenceHeartbeat()});if(location.pathname==="/u2"){beginSignIn(2)}else if(location.pathname==="/u1"||location.pathname==="/u0"){beginSignIn(0)}else if(location.pathname==="/auth/callback"){completeSignIn().catch(error=>{history.replaceState({},"","/");showAuthError(error.message)})}
 else if(location.pathname==="/verify"){restoreSignIn();loadVerificationPage()}else{let decodedPath=location.pathname;try{decodedPath=decodeURIComponent(decodedPath)}catch{}const match=decodedPath.match(/^\/@([^/]+)\/?$/);if(match){const recommendations=document.querySelector("#recommendations");if(recommendations)recommendations.hidden=true;restoreSignIn();loadProfile(match[1])}else if(decodedPath==="/search"||decodedPath==="/explore"){const query=new URLSearchParams(location.search).get("q")||"";location.replace("/?q="+encodeURIComponent(query))}else{restoreSignIn();const query=new URLSearchParams(location.search).get("q")||"";if(query){pageTitle.textContent="Search results";const aside=document.querySelector("#recommendations");if(aside)aside.hidden=true;feed.innerHTML='<div id="search-results"></div>';runProfileSearch(query)}else loadHome()}}
