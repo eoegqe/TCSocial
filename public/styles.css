@@ -330,3 +330,6 @@ h1,h2,h3,p{margin-top:0}
 .profile-card .bio{text-align:center}
 .profile-card .profile-social-links{justify-content:center}
 }
+
+.profile-message-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none;white-space:nowrap}
+.profile-message-button i{width:16px;height:16px}
