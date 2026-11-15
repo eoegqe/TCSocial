@@ -520,6 +520,13 @@ export default {
           }
           return notFound();
         }
+        try{
+          const accountStatusResponse=await fetch("https://accounts.theegget.com/api/public/account-status/"+user.id,{cf:{cacheTtl:0}});
+          if(accountStatusResponse.ok){
+            const accountStatus=await accountStatusResponse.json();
+            if(accountStatus.is_banned)user.status="banned";
+          }
+        }catch(error){console.error("Social account ban status lookup failed",String(error?.message||error))}
         if(user.is_private&&user.status!=="banned"){
           let canView=false;
           const authorization=request.headers.get("authorization")||"",viewerToken=authorization.match(/^Bearer\s+(.+)$/i);
