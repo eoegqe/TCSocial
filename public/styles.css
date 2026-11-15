@@ -308,3 +308,9 @@ h1,h2,h3,p{margin-top:0}
 .profile-actions .profile-edit-button,.profile-actions .profile-verify-button{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0}
 .profile-actions .profile-edit-button svg,.profile-actions .profile-verify-button svg{width:17px;height:17px;stroke-width:2}
 @media(max-width:760px){.profile-name-row .profile-actions{flex-direction:column;margin-top:0}}
+
+@media(max-width:760px){
+.profile-identity>[data-follow]{margin:0;border:1px solid #f4f4f4;background:#f4f4f4;color:#111;border-radius:7px;padding:7px 13px;font:700 11px "DM Sans",sans-serif;cursor:pointer}
+.profile-identity>[data-follow]:hover{background:#ddd;border-color:#ddd}
+.profile-identity .profile-actions{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;margin:0}
+}
