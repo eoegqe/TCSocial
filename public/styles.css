@@ -292,3 +292,8 @@ h1,h2,h3,p{margin-top:0}
 @media(max-width:760px){.profile-actions{align-items:center;margin-top:0}.profile-actions [data-follow]{border:1px solid #f4f4f4;background:#f4f4f4;color:#111;border-radius:7px;font-weight:700}.profile-actions [data-follow]:hover{background:#ddd;border-color:#ddd}}
 
 @media(min-width:761px){.profile-card-no-banner .profile-identity>div{margin-top:16px}}
+
+@media(min-width:761px){
+.profile-actions{flex-direction:row;align-items:center;gap:8px;margin-top:10px}
+.profile-actions .profile-edit-button,.profile-actions>[data-verify-type],.profile-actions>[data-follow]{margin:0}
+}
