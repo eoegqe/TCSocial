@@ -383,7 +383,7 @@ export default {
       const pageId=Number(pageClaimMatch[1]),action=pageClaimMatch[2];
       if(!Number.isSafeInteger(pageId)||pageId<1)return json({error:"invalid_page"},400);
       const authorization=request.headers.get("authorization")||"";
-      const match=authorization.match(/^Bearer\\s+(.+)$/i);
+      const match=authorization.match(/^Bearer\s+(.+)$/i);
       if(!match)return json({error:"unauthorized"},401);
       try{
         const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
