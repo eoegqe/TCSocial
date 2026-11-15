@@ -54,7 +54,7 @@ h1,h2,h3,p{margin-top:0}
 .account-dropdown[hidden]{display:none}
 .account-dropdown a,.account-dropdown button{display:block;width:100%;padding:10px 11px;border:0;border-radius:6px;background:transparent;color:#eee;text-align:left;font:500 12px 'DM Sans',sans-serif;cursor:pointer}
 .account-dropdown a:hover,.account-dropdown button:hover{background:#252525}
-.account-dropdown button{color:#e3a0a0}
+.account-dropdown button{color:#eee}.account-dropdown [data-account-logout]{color:#e3a0a0}
 .profile-top .profile-edit-button{margin-left:auto}
 
 .profile-editor-card h2{margin-bottom:20px}
