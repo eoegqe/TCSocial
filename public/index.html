@@ -14,12 +14,12 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="Theegget's Social home"><span class="brand-mark">T</span><span>Theegget's Social</span></a>
+    <div class="brand-group"><button class="mobile-menu-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="app-sidebar"><i data-lucide="menu"></i></button><a class="brand" href="/" aria-label="Theegget's Social home"><span class="brand-mark">T</span><span>Theegget's Social</span></a></div>
     <form id="global-search-form" class="global-search" role="search"><input id="global-search-input" name="q" type="search" maxlength="48" minlength="2" placeholder="Search profiles and pages" aria-label="Search profiles and pages"><button type="submit" aria-label="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button></form>
     <div class="account-menu-wrap"><a class="sign-in" href="#" data-tc-signin data-tc-header-account>Sign in with TC</a><div class="account-dropdown" data-account-dropdown hidden><a data-view-account-page href="/">View page</a><button type="button" data-create-page>Create a page</button><button type="button" data-account-logout>Log out</button></div></div>
   </header>
   <main id="app" class="layout">
-    <aside class="app-sidebar" aria-label="Main navigation">
+    <aside class="app-sidebar" id="app-sidebar" aria-label="Main menu"><button class="mobile-menu-back" type="button"><i data-lucide="arrow-left"></i><span>Back</span></button>
       <a class="sidebar-link" href="/" data-sidebar-home><i data-lucide="house"></i><span>Home</span></a>
       <a class="sidebar-link" href="/messages"><i data-lucide="message-circle"></i><span>Messages</span></a>
     </aside>
@@ -30,6 +30,7 @@
     </section>
     <aside id="recommendations" class="recommendations-column" aria-label="Recommended profiles"></aside>
   </main>
+  <nav class="mobile-bottom-nav" aria-label="Page navigation"><a href="/" aria-label="Home" data-mobile-home><i data-lucide="house"></i></a><a href="/messages" aria-label="Messages"><i data-lucide="message-circle"></i></a></nav>
   <div id="auth-modal" class="modal" hidden>
     <div class="modal-backdrop" data-close-auth></div>
     <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
@@ -42,6 +43,6 @@
     </section>
   </div>
   <div id="toast" class="toast" role="status"></div>
-<script>window.addEventListener("load",()=>{window.lucide?.createIcons();const home=document.querySelector("[data-sidebar-home]");if(home&&location.pathname==="/")home.classList.add("active")});if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}))}</script>
+<script>window.addEventListener("load",()=>{window.lucide?.createIcons();const home=document.querySelector("[data-sidebar-home]");const mobileHome=document.querySelector("[data-mobile-home]");if(location.pathname==="/"){home?.classList.add("active");mobileHome?.classList.add("active")}const sidebar=document.querySelector("#app-sidebar");const toggle=document.querySelector(".mobile-menu-toggle");const close=document.querySelector(".mobile-menu-back");const setMenu=open=>{sidebar?.classList.toggle("menu-open",open);toggle?.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-visible",open)};toggle?.addEventListener("click",()=>setMenu(!sidebar?.classList.contains("menu-open")));close?.addEventListener("click",()=>setMenu(false));sidebar?.querySelectorAll("a").forEach(link=>link.addEventListener("click",()=>setMenu(false)))});if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}))}</script>
 </body>
 </html>
