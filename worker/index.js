@@ -330,10 +330,10 @@ export default {
         const identity=await identityResponse.json();
         if(Number(identity.sub)!==1)return json({error:"forbidden"},403);
         const body=await request.json().catch(()=>null);
-        if(!body||!["user","page"].includes(body.type)||typeof body.username!=="string"||typeof body.verified!=="boolean"||!["account","business","group","ai"].includes(body.verification_type)||body.staff!==undefined&&typeof body.staff!=="boolean")return json({error:"invalid_body"},400);
+        if(!body||!["user","page"].includes(body.type)||typeof body.username!=="string"||typeof body.verified!=="boolean"||!["account","business","group","ai","musician"].includes(body.verification_type)||body.staff!==undefined&&typeof body.staff!=="boolean")return json({error:"invalid_body"},400);
         const table=body.type==="user"?"users":"social_pages",nameColumn=body.type==="user"?"username":"handle";
         const result=body.staff!==undefined
-          ?await env.TC.prepare("UPDATE "+table+" SET is_tc_staff=? WHERE "+nameColumn+"=? COLLATE NOCASE AND status='active'").bind(body.staff?1:0,body.username).run()
+          ?await env.TC.prepare("UPDATE "+table+" SET verified=?,verification_type=?,is_tc_staff=? WHERE "+nameColumn+"=? COLLATE NOCASE AND status='active'").bind(body.verified?1:0,body.verified?body.verification_type:"account",body.staff?1:0,body.username).run()
           :await env.TC.prepare("UPDATE "+table+" SET verified=?,verification_type=? WHERE "+nameColumn+"=? COLLATE NOCASE AND status='active'").bind(body.verified?1:0,body.verified?body.verification_type:"account",body.username).run();
         if(!result.meta?.changes)return notFound();
         return json({verified:body.verified});
