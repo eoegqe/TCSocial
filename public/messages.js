@@ -16,14 +16,14 @@ async function unlock(){
  if(remembered){privateKey=remembered;return}
  const getBundle=()=>api("/api/keys/self",{method:"GET"});
  let data=await getBundle();
- const modal=$("key-modal"),form=$("key-form"),field=$("key-passphrase"),button=form.querySelector('[type="submit"]'),errorBox=$("key-error");
+ const modal=$("key-modal"),form=$("key-form"),field=$("key-passphrase"),button=$("key-unlock-button"),errorBox=$("key-error");
  modal.hidden=false;
  $("key-title").textContent=data.key_bundle?"Unlock encrypted messages":"Set up encrypted messages";
  $("key-description").textContent=data.key_bundle?"Enter the recovery passphrase you already use in TC Chat. Your passphrase stays on this device.":"Create a recovery passphrase with at least 12 characters. Keep it safe: it protects access to your encrypted messages.";
  field.autocomplete=data.key_bundle?"current-password":"new-password";
  field.placeholder=data.key_bundle?"Your existing TC Chat recovery passphrase":"Create a recovery passphrase";
  return new Promise((resolve,reject)=>{
-  form.addEventListener("submit",async event=>{
+  const submitUnlock=async event=>{
    event.preventDefault();
    if(button.disabled)return;
    errorBox.textContent="";
@@ -62,7 +62,7 @@ async function unlock(){
     button.disabled=false;
     button.textContent="Unlock messages";
    }
-  });
+  };button.addEventListener("click",submitUnlock);form.addEventListener("submit",event=>{event.preventDefault();submitUnlock(event)});field.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();submitUnlock(event)}});
  });
 }
 function conversationName(c){const other=(c.participants||[]).find(p=>String(p.id)!==String(user.id));return c.type==="group"?(c.title||"Group conversation"):(other?.username?"@"+other.username:"Conversation")}
