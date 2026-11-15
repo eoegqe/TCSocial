@@ -89,7 +89,7 @@ export async function handleMessagingRequest(request,env,url){
   const participants=await env.TC.prepare("SELECT user_id FROM tc_chat_participants WHERE conversation_id=?").bind(cid).all(),ids=(participants.results||[]).map(x=>String(x.user_id));
   if(ids.length<2||Object.keys(envelope.wrapped_keys).length!==ids.length||ids.some(id=>typeof envelope.wrapped_keys[id]!=="string"))return fail("missing_recipient_key","The replacement must be encrypted for every participant.",400);
   const updated=await env.TC.prepare("UPDATE tc_chat_messages SET body='',encrypted_payload=? WHERE id=? AND conversation_id=? AND encrypted_payload IS NULL AND deleted_at IS NULL").bind(payload,mid,cid).run();
-  if(!updated.meta?.changes)return fail("message_not_migratable","This message is already encrypted or unavailable.",409);
+  if(!updated.meta?.changes){const existing=await env.TC.prepare("SELECT encrypted_payload FROM tc_chat_messages WHERE id=? AND conversation_id=? AND deleted_at IS NULL").bind(mid,cid).first();if(existing?.encrypted_payload)return json({success:true,already_encrypted:true});return fail("message_not_migratable","This message is unavailable.",409)}
   return json({success:true});
  }
  const match=path.match(/^\/api\/conversations\/([a-f0-9-]+)\/messages$/i);
