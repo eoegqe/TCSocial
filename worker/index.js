@@ -32,7 +32,7 @@ export default {
       html=removeAside(html,'<aside class="right-column">');
       html=html.replace("/styles.css?v=20261112-2","/styles.css?v=20261113-ai-verification-1");
       html=html.replace("/styles.css?v=20261113-profiles-admin-1","/styles.css?v=20261113-ai-verification-1");
-      html=html.replace("/app.js?v=20261113-profiles-admin-1","/app.js?v=20261114-theeggets-social-1");
+      html=html.replace("/app.js?v=20261113-profiles-admin-1","/app.js?v=20261115-ban-notice-2");
       html=html.replace("</head>",'<style>.banned-profile-notice{display:flex;align-items:center;gap:9px;width:100vw;box-sizing:border-box;margin:0 0 16px;margin-left:calc((100% - 100vw)/2);padding:8px 18px;background:rgba(190,35,45,.10);border-bottom:1px solid rgba(220,53,69,.3);color:#ff737b;font-size:12px;font-weight:600}.banned-profile-notice svg{width:15px;height:15px;flex:0 0 auto;color:#ff626c}.banned-profile-notice span{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}.banned-profile-notice small{font-size:11px;font-weight:400;color:#e6a0a3}</style></head>');
       html=html.replace("</head>",'<style>.banned-profile-notice{display:flex;align-items:center;gap:8px;padding:10px 13px;margin:0 0 14px;border-top:3px solid #dc4444;background:rgba(220,68,68,.09);color:#ff7777;font-size:13px;font-weight:600}.banned-profile-notice svg{width:16px;height:16px;flex:none}</style></head>');
       return new Response(html,{status:asset.status,headers:asset.headers});
