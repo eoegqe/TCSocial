@@ -272,7 +272,7 @@ h1,h2,h3,p{margin-top:0}
 }
 
 
-.profile-card-no-banner{padding-top:25px;overflow:visible}
+.profile-card-no-banner{padding-top:0;overflow:visible}
 .profile-card-no-banner .profile-top{margin-top:0}
 .profile-card-no-banner .profile-identity>.avatar{position:relative;top:-41px;margin-bottom:-41px;box-shadow:0 0 0 1px var(--line)}
 @media(max-width:760px){
