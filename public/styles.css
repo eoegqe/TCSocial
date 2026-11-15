@@ -302,3 +302,8 @@ h1,h2,h3,p{margin-top:0}
 .profile-card-no-banner .profile-identity>.avatar{margin-bottom:0}
 .profile-card-no-banner .profile-identity>div{margin-top:0}
 }
+
+.profile-name-row .profile-actions{display:flex;flex-direction:row;align-items:center;gap:8px;margin:0}
+.profile-actions .profile-edit-button,.profile-actions .profile-verify-button{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0}
+.profile-actions .profile-edit-button svg,.profile-actions .profile-verify-button svg{width:17px;height:17px;stroke-width:2}
+@media(max-width:760px){.profile-name-row .profile-actions{flex-direction:column;margin-top:0}}
