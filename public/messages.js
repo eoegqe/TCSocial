@@ -23,7 +23,7 @@ async function unlock(){
  field.autocomplete=data.key_bundle?"current-password":"new-password";
  field.placeholder=data.key_bundle?"Your existing TC Chat recovery passphrase":"Create a recovery passphrase";
  return new Promise((resolve,reject)=>{
-  form.onsubmit=async event=>{
+  form.addEventListener("submit",async event=>{
    event.preventDefault();
    if(button.disabled)return;
    errorBox.textContent="";
@@ -62,7 +62,7 @@ async function unlock(){
     button.disabled=false;
     button.textContent="Unlock messages";
    }
-  };
+  });
  });
 }
 function conversationName(c){const other=(c.participants||[]).find(p=>String(p.id)!==String(user.id));return c.type==="group"?(c.title||"Group conversation"):(other?.username?"@"+other.username:"Conversation")}
