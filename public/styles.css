@@ -54,7 +54,7 @@ h1,h2,h3,p{margin-top:0}
 .account-dropdown[hidden]{display:none}
 .account-dropdown a,.account-dropdown button{display:block;width:100%;padding:10px 11px;border:0;border-radius:6px;background:transparent;color:#eee;text-align:left;font:500 12px 'DM Sans',sans-serif;cursor:pointer}
 .account-dropdown a:hover,.account-dropdown button:hover{background:#252525}
-.account-dropdown button{color:#eee}.account-dropdown [data-account-logout]{color:#e3a0a0}
+.account-dropdown button{color:#eee!important}.account-dropdown button[data-create-page]{color:#eee!important}.account-dropdown button[data-account-logout]{color:#e3a0a0!important}
 .profile-top .profile-edit-button{margin-left:auto}
 
 .profile-editor-card h2{margin-bottom:20px}
@@ -148,7 +148,6 @@ h1,h2,h3,p{margin-top:0}
 
 .global-search{display:flex;align-items:center;width:min(420px,42vw);height:38px;border:1px solid #303030;border-radius:9px;background:#111;overflow:hidden}.global-search:focus-within{border-color:#777}.global-search input{width:100%;min-width:0;height:100%;padding:0 12px;border:0;outline:0;background:transparent;color:#f4f4f4;font:12px 'DM Sans',sans-serif}.global-search input::placeholder{color:#777}.global-search button{display:grid;place-items:center;width:40px;height:100%;flex:none;border:0;border-left:1px solid #292929;background:#171717;color:#bbb;cursor:pointer}.global-search button:hover{color:#fff;background:#222}.global-search svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}@media(max-width:650px){.topbar{gap:10px}.brand{font-size:15px;gap:7px}.brand-mark{width:30px;height:30px}.global-search{width:auto;flex:1;max-width:230px;height:35px}.global-search input{font-size:11px;padding:0 8px}.global-search button{width:34px}}
 
-.create-page-button{margin:0 0 12px}
 .page-about-wrap{margin:14px 0 22px}
 .page-about-toggle{min-width:88px}
 .page-about{margin-top:10px;padding:16px;border:1px solid #292929;border-radius:11px;background:#111}
