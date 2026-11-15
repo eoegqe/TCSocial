@@ -377,6 +377,38 @@ export default {
         return json({error:"internal_error"},500);
       }
     }
+
+    const pageClaimMatch=url.pathname.match(/^\/api\/pages\/(\d+)\/(claim|unclaim)$/);
+    if(pageClaimMatch&&request.method==="POST"){
+      const pageId=Number(pageClaimMatch[1]),action=pageClaimMatch[2];
+      if(!Number.isSafeInteger(pageId)||pageId<1)return json({error:"invalid_page"},400);
+      const authorization=request.headers.get("authorization")||"";
+      const match=authorization.match(/^Bearer\\s+(.+)$/i);
+      if(!match)return json({error:"unauthorized"},401);
+      try{
+        const identityResponse=await fetch("https://accounts.theegget.com/oauth/userinfo",{headers:{authorization:"Bearer "+match[1],accept:"application/json"}});
+        if(!identityResponse.ok)return json({error:"unauthorized"},401);
+        const identity=await identityResponse.json();
+        const user=await env.TC.prepare("SELECT id FROM users WHERE id=? AND username=? COLLATE NOCASE AND status='active'").bind(Number(identity.sub),String(identity.preferred_username||"")).first();
+        if(!user)return json({error:"social_account_required"},403);
+        const page=await env.TC.prepare("SELECT id FROM social_pages WHERE id=? AND status='active'").bind(pageId).first();
+        if(!page)return notFound();
+        if(action==="unclaim"){
+          if(pageId===1)return json({error:"protected_page",message:"The official page cannot be unclaimed."},403);
+          const owner=await env.TC.prepare("SELECT 1 AS allowed FROM social_page_managers WHERE page_id=? AND user_id=? AND role='owner'").bind(pageId,user.id).first();
+          if(!owner)return json({error:"not_page_owner"},403);
+          await env.TC.prepare("DELETE FROM social_page_managers WHERE page_id=?").bind(pageId).run();
+          return json({unclaimed:true});
+        }
+        const result=await env.TC.prepare("INSERT INTO social_page_managers (page_id,user_id,role,created_at) SELECT ?,?,'owner',? WHERE NOT EXISTS (SELECT 1 FROM social_page_managers WHERE page_id=? AND role='owner')").bind(pageId,user.id,new Date().toISOString(),pageId).run();
+        if(!result.meta?.changes)return json({error:"already_claimed",message:"This page already has an owner."},409);
+        return json({claimed:true});
+      }catch(error){
+        if(String(error?.message||"").includes("UNIQUE"))return json({error:"already_claimed",message:"This page already has an owner."},409);
+        console.error("TC Social page ownership update failed",String(error?.message||error));
+        return json({error:"internal_error"},500);
+      }
+    }
     if(url.pathname.startsWith("/api/pages/")&&request.method==="PATCH"){
       const pageId=Number(url.pathname.slice("/api/pages/".length));
       if(!Number.isSafeInteger(pageId)||pageId<1)return json({error:"invalid_page"},400);
@@ -503,7 +535,7 @@ export default {
           const page=await env.TC.prepare("SELECT id,handle,display_name,bio,profile_picture,banner_image,verified,verification_type,is_tc_staff,owner_user_id FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
           if(parts.length===3){
-            let canManage=false,canVerify=false;
+            let canManage=false,canVerify=false,canClaim=false,canUnclaim=false;
             const auth=request.headers.get("authorization")||"";
             const tokenMatch=auth.match(/^Bearer\s+(.+)$/i);
             if(tokenMatch){
@@ -513,11 +545,11 @@ export default {
                   const identity=await identityResponse.json();
                   canVerify=Number(identity.sub)===1;
                   const manager=await env.TC.prepare("SELECT role FROM social_page_managers WHERE page_id=? AND user_id=?").bind(page.id,Number(identity.sub)).first();
-                  canManage=Number(identity.sub)===1||Boolean(manager&&["owner","admin"].includes(manager.role));
+                  canManage=Number(identity.sub)===1||Boolean(manager&&["owner","admin"].includes(manager.role));canUnclaim=Boolean(manager?.role==="owner"&&page.id!==1);canClaim=!manager;
                 }
               }catch{}
             }
-            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();const creator=await env.TC.prepare("SELECT username,display_name,profile_picture,is_private FROM users WHERE id=? AND status=?").bind(page.owner_user_id,"active").first();const creatorInfo=creator&&!creator.is_private?{username:creator.username,display_name:creator.display_name||creator.username,profile_picture:publicPicture(creator.profile_picture,creator.username)}:null;return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:page.bio||null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,creator:creatorInfo,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0),is_online:false}});return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:page.bio||null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0),is_online:false}});
+            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();const creator=await env.TC.prepare("SELECT username,display_name,profile_picture,is_private FROM users WHERE id=? AND status=?").bind(page.owner_user_id,"active").first();const creatorInfo=creator&&!creator.is_private?{username:creator.username,display_name:creator.display_name||creator.username,profile_picture:publicPicture(creator.profile_picture,creator.username)}:null;return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:page.bio||null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,creator:creatorInfo,can_manage:canManage,can_verify:canVerify,can_claim:canClaim,can_unclaim:canUnclaim,follower_count:Number(followers?.count||0),is_online:false}});return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:page.bio||null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0),is_online:false}});
           }
           if(parts.length===4&&parts[3]==="posts"){
             const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE((SELECT json_group_array(json_object('id',m.id,'url','/api/media/'||m.id,'file_name',m.file_name,'mime_type',m.mime_type,'media_kind',m.media_kind,'file_size',m.file_size)) FROM social_post_media m WHERE m.post_id=p.id),'[]') AS attachments,sp.handle AS username,sp.display_name,sp.profile_picture,sp.verified,sp.verification_type,sp.is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
