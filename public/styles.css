@@ -323,12 +323,12 @@ h1,h2,h3,p{margin-top:0}
 }
 
 @media(min-width:761px){
-.profile-top{flex-direction:column;align-items:center;justify-content:center;text-align:center}
-.profile-identity{align-items:center;text-align:center}
-.profile-identity>div{align-items:center;text-align:center}
-.profile-name-row{justify-content:center}
-.profile-card .bio{text-align:center}
-.profile-card .profile-social-links{justify-content:center}
+.profile-top{flex-direction:row;align-items:flex-end;justify-content:flex-start;text-align:left}
+.profile-identity{flex-direction:row;align-items:flex-end;text-align:left}
+.profile-identity>div{align-items:flex-start;text-align:left}
+.profile-name-row{justify-content:flex-start}
+.profile-card .bio{text-align:left}
+.profile-card .profile-social-links{justify-content:flex-start}
 }
 
 .profile-message-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none;white-space:nowrap}
