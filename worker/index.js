@@ -350,15 +350,22 @@ export default {
         if(!user)return json({error:"social_account_required"},403);
         const body=await request.json().catch(()=>null);
         if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
-        const handle=String(body.handle||"").trim(),displayName=String(body.display_name||"").trim();
+        const handle=String(body.handle||"").trim(),displayName=String(body.display_name||"").trim(),bio=String(body.bio||"").trim();
         if(!/^[A-Za-z0-9_]{3,24}$/.test(handle)||handle.toLowerCase()==="tc")return json({error:"invalid_handle",message:"Page handles must be 3 to 24 letters, numbers, or underscores. @TC is reserved."},400);
         if(!displayName||displayName.length>80)return json({error:"invalid_display_name",message:"Page name is required and must be 80 characters or fewer."},400);
+        if(bio.length>500)return json({error:"bio_too_long",message:"Page bio must be 500 characters or fewer."},400);
+        const picture=String(body.profile_picture||"").trim();
+        const uploaded=picture.match(/^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/]+={0,2})$/);
+        if(!uploaded)return json({error:"icon_required",message:"Choose a PNG, JPEG, or WebP icon for your page."},400);
+        let decoded;try{decoded=atob(uploaded[2])}catch{return json({error:"invalid_image"},400)}
+        if(decoded.length>400000)return json({error:"image_too_large",message:"The resized icon must be 400 KB or smaller."},413);
+        const storedPicture="upload:"+uploaded[1]+":"+uploaded[2];
         const now=new Date().toISOString();
-        const result=await env.TC.prepare("INSERT INTO social_pages (handle,display_name,owner_user_id,status,created_at) VALUES (?,?,?,?,?)").bind(handle,displayName,user.id,"active",now).run();
+        const result=await env.TC.prepare("INSERT INTO social_pages (handle,display_name,bio,profile_picture,owner_user_id,status,created_at) VALUES (?,?,?,?,?,?,?)").bind(handle,displayName,bio||null,storedPicture,user.id,"active",now).run();
         const pageId=Number(result.meta?.last_row_id);
         if(!pageId)return json({error:"page_creation_failed"},500);
         await env.TC.prepare("INSERT INTO social_page_managers (page_id,user_id,role,created_at) VALUES (?,?,?,?)").bind(pageId,user.id,"owner",now).run();
-        return json({created:true,page:{id:pageId,username:handle,display_name:displayName,is_page:true}},201);
+        return json({created:true,page:{id:pageId,username:handle,display_name:displayName,bio:bio||null,profile_picture:"/api/avatar/"+encodeURIComponent(handle),is_page:true}},201);
       }catch(error){
         if(String(error?.message||"").includes("UNIQUE"))return json({error:"handle_taken",message:"That page handle is already taken."},409);
         console.error("TC Social page creation failed",String(error?.message||error));
@@ -378,12 +385,14 @@ export default {
         const userId=Number(identity.sub);
         const manager=await env.TC.prepare("SELECT role FROM social_page_managers WHERE page_id=? AND user_id=?").bind(pageId,userId).first();
         if(userId!==1&&(!manager||!["owner","admin"].includes(manager.role)))return json({error:"forbidden"},403);
-        const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image FROM social_pages WHERE id=? AND status='active'").bind(pageId).first();
+        const page=await env.TC.prepare("SELECT id,handle,display_name,bio,profile_picture,banner_image FROM social_pages WHERE id=? AND status='active'").bind(pageId).first();
         if(!page)return notFound();
         const body=await request.json().catch(()=>null);
         if(!body||typeof body!=="object"||Array.isArray(body))return json({error:"invalid_body"},400);
         const displayName=String(body.display_name??page.display_name).trim();
         const handle=String(body.handle??page.handle).trim();
+        const bio=String(body.bio??page.bio??"").trim();
+        if(bio.length>500)return json({error:"bio_too_long",message:"Page bio must be 500 characters or fewer."},400);
         if(!displayName||displayName.length>80)return json({error:"invalid_display_name"},400);
         if(!/^[A-Za-z0-9_]{3,24}$/.test(handle)&&handle.toLowerCase()!=="tc")return json({error:"invalid_handle",message:"Handles must be 3–24 letters, numbers, or underscores. @TC is reserved."},400);
         let picture=Object.prototype.hasOwnProperty.call(body,"profile_picture")?(body.profile_picture==null||String(body.profile_picture).trim()===""?null:String(body.profile_picture).trim()):page.profile_picture;
@@ -411,8 +420,8 @@ export default {
           let imageUrl;try{imageUrl=new URL(banner)}catch{return json({error:"invalid_banner_url"},400)}
           if(imageUrl.protocol!=="https:"||banner.length>2048)return json({error:"invalid_banner_url"},400);
         }
-        await env.TC.prepare("UPDATE social_pages SET handle=?,display_name=?,profile_picture=?,banner_image=? WHERE id=?").bind(handle,displayName,picture,banner,pageId).run();
-        return json({profile:{id:pageId,username:handle,display_name:displayName,profile_picture:publicPicture(picture,handle),banner_image:publicBanner(banner,handle),is_page:true,can_manage:true}});
+        await env.TC.prepare("UPDATE social_pages SET handle=?,display_name=?,bio=?,profile_picture=?,banner_image=? WHERE id=?").bind(handle,displayName,bio||null,picture,banner,pageId).run();
+        return json({profile:{id:pageId,username:handle,display_name:displayName,bio:bio||null,profile_picture:publicPicture(picture,handle),banner_image:publicBanner(banner,handle),is_page:true,can_manage:true}});
       }catch(error){
         if(String(error?.message||"").includes("UNIQUE"))return json({error:"handle_taken",message:"That handle is already in use."},409);
         console.error("TC Social page update failed",String(error?.message||error));
@@ -486,7 +495,7 @@ export default {
       try{
         const user=await env.TC.prepare("SELECT id,username,display_name,bio,profile_picture,banner_image,social_links,verified,verification_type,is_tc_staff,is_private,last_heartbeat_at FROM users WHERE username=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
         if(!user){
-          const page=await env.TC.prepare("SELECT id,handle,display_name,profile_picture,banner_image,verified,verification_type,is_tc_staff,owner_user_id FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
+          const page=await env.TC.prepare("SELECT id,handle,display_name,bio,profile_picture,banner_image,verified,verification_type,is_tc_staff,owner_user_id FROM social_pages WHERE handle=? COLLATE NOCASE AND status='active' LIMIT 1").bind(username).first();
           if(!page)return notFound();
           if(parts.length===3){
             let canManage=false,canVerify=false;
@@ -503,7 +512,7 @@ export default {
                 }
               }catch{}
             }
-            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();const creator=await env.TC.prepare("SELECT username,display_name,profile_picture,is_private FROM users WHERE id=? AND status=?").bind(page.owner_user_id,"active").first();const creatorInfo=creator&&!creator.is_private?{username:creator.username,display_name:creator.display_name||creator.username,profile_picture:publicPicture(creator.profile_picture,creator.username)}:null;return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,creator:creatorInfo,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0),is_online:false}});return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0),is_online:false}});
+            const followers=await env.TC.prepare("SELECT COUNT(*) AS count FROM social_page_follows WHERE page_id=?").bind(page.id).first();const creator=await env.TC.prepare("SELECT username,display_name,profile_picture,is_private FROM users WHERE id=? AND status=?").bind(page.owner_user_id,"active").first();const creatorInfo=creator&&!creator.is_private?{username:creator.username,display_name:creator.display_name||creator.username,profile_picture:publicPicture(creator.profile_picture,creator.username)}:null;return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:page.bio||null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,creator:creatorInfo,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0),is_online:false}});return json({profile:{id:page.id,username:page.handle,display_name:page.display_name,bio:page.bio||null,profile_picture:publicPicture(page.profile_picture,page.handle),banner_image:publicBanner(page.banner_image,page.handle),verified:Boolean(page.verified),verification_type:page.verification_type||"account",is_tc_staff:Boolean(page.is_tc_staff),is_page:true,can_manage:canManage,can_verify:canVerify,follower_count:Number(followers?.count||0),is_online:false}});
           }
           if(parts.length===4&&parts[3]==="posts"){
             const pagePosts=await env.TC.prepare("SELECT p.id,p.content,p.media_url,p.created_at,COALESCE((SELECT json_group_array(json_object('id',m.id,'url','/api/media/'||m.id,'file_name',m.file_name,'mime_type',m.mime_type,'media_kind',m.media_kind,'file_size',m.file_size)) FROM social_post_media m WHERE m.post_id=p.id),'[]') AS attachments,sp.handle AS username,sp.display_name,sp.profile_picture,sp.verified,sp.verification_type,sp.is_tc_staff,(SELECT COUNT(*) FROM social_reactions r WHERE r.post_id=p.id) AS reaction_count,(SELECT COUNT(*) FROM social_comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comment_count FROM social_posts p JOIN social_pages sp ON sp.id=p.author_page_id WHERE p.author_page_id=? AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 30").bind(page.id).all();
