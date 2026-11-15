@@ -101,7 +101,7 @@ async function loadPostReactionStates(root){
 function renderBotBlockedError(){
  const messages=["sorry clanker You can\u0027t access this action yeah I\u0027ll just call you that until you verify","clanker... You in fact do not have access","look at the sign. We are anti-bot\u0027s"];
  const message=messages[Math.floor(Math.random()*messages.length)];
- feed.innerHTML='<section class="error-shell"><div class="error-card"><p class="error-code bot-error-code">Action blocked</p><h2 class="error-title">Action blocked</h2><p class="error-message">'+escapeHtml(message)+'</p><a class="error-home" href="/">Back to Theegget's Social</a></div></section>';
+ feed.innerHTML='<section class="error-shell"><div class="error-card"><p class="error-code bot-error-code">Action blocked</p><h2 class="error-title">Action blocked</h2><p class="error-message">'+escapeHtml(message)+'</p><a class="error-home" href="/">Back to Theegget&#39;s Social</a></div></section>';
 }
 function renderRequestError(error){if(error?.code==="bot_detected"&&error?.confidence==="high"){renderBotBlockedError();return}renderError(error?.status||500)}
 function renderError(status){
@@ -122,7 +122,7 @@ function renderError(status){
   title="500 · Internal Server Error";
   message=attempt===1?"Well, that wasn't supposed to happen. Something went wrong on our end.":"Looks like Theegget might need to fix the servers again.";
  }
- feed.innerHTML='<section class="error-shell"><div class="error-card"><p class="error-code">'+escapeHtml(code)+'</p><h2 class="error-title">'+escapeHtml(title)+'</h2><p class="error-message">'+escapeHtml(message)+'</p><a class="error-home" href="/">Back to Theegget's Social</a></div></section>';
+ feed.innerHTML='<section class="error-shell"><div class="error-card"><p class="error-code">'+escapeHtml(code)+'</p><h2 class="error-title">'+escapeHtml(title)+'</h2><p class="error-message">'+escapeHtml(message)+'</p><a class="error-home" href="/">Back to Theegget&#39;s Social</a></div></section>';
 }
 async function loadRecommendations(){
  const aside=document.querySelector("#recommendations");
