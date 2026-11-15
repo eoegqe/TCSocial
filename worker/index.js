@@ -254,7 +254,7 @@ export default {
         const post=await env.TC.prepare("SELECT id FROM social_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first();
         if(!post)return notFound();
         if(kind==="comments"&&request.method==="GET"){
-          const result=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? AND c.deleted_at IS NULL AND u.status='active' ORDER BY c.created_at ASC LIMIT 100").bind(postId).all();
+          const result=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,u.role FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? AND c.deleted_at IS NULL AND u.status='active' ORDER BY c.created_at ASC LIMIT 100").bind(postId).all();
           return json({comments:publicPosts(result.results)});
         }
         if(kind==="reactions"&&request.method==="GET"){
@@ -291,7 +291,7 @@ export default {
           if(content.length>1000)return json({error:"comment_too_long",message:"Comments must be 1,000 characters or fewer."},400);
           const createdAt=new Date().toISOString();
           const result=await env.TC.prepare("INSERT INTO social_comments (post_id,user_id,content,created_at,updated_at) VALUES (?,?,?,?,?)").bind(postId,user.id,content,createdAt,createdAt).run();
-          const comment=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.id=?").bind(result.meta?.last_row_id).first();
+          const comment=await env.TC.prepare("SELECT c.id,c.content,c.created_at,u.username,u.display_name,u.profile_picture,u.verified,u.verification_type,u.is_tc_staff,u.role FROM social_comments c JOIN users u ON u.id=c.user_id WHERE c.id=?").bind(result.meta?.last_row_id).first();
           return json({comment:comment?{...comment,profile_picture:publicPicture(comment.profile_picture,comment.username)}:null},201);
         }
         return json({error:"method_not_allowed"},405);
