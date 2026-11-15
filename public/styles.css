@@ -299,7 +299,8 @@ h1,h2,h3,p{margin-top:0}
 }
 
 @media(min-width:761px){
-.profile-card-no-banner .profile-identity>.avatar{margin-bottom:0}
+.profile-card-no-banner{padding-top:25px}
+.profile-card-no-banner .profile-identity>.avatar{position:static;top:auto;margin-bottom:0}
 .profile-card-no-banner .profile-identity>div{margin-top:0}
 }
 
