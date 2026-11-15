@@ -279,3 +279,6 @@ h1,h2,h3,p{margin-top:0}
  .profile-card-no-banner .profile-top{margin-top:0}
  .profile-card-no-banner .profile-identity>.avatar{top:-38px;margin-bottom:-38px}
 }
+
+.profile-name-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;min-width:0}.profile-name-row .profile-name{margin:0}.profile-name-row [data-follow]{border:1px solid #f4f4f4;background:#f4f4f4;color:#111;border-radius:7px;padding:7px 13px;font:700 11px "DM Sans",sans-serif;cursor:pointer}.profile-name-row [data-follow]:hover{background:#ddd;border-color:#ddd}.profile-name-row [data-follow]:disabled{opacity:.6;cursor:wait}
+@media(max-width:760px){.profile-name-row{justify-content:center}}
