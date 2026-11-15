@@ -12,12 +12,58 @@ async function getRememberedKey(){try{const db=await rememberDb();const value=aw
 async function rememberKey(key){const db=await rememberDb();await new Promise((resolve,reject)=>{const request=db.transaction("sessions","readwrite").objectStore("sessions").put({key,expiresAt:Date.now()+30*24*60*60*1000},"private-key");request.onsuccess=resolve;request.onerror=()=>reject(request.error)});db.close()}
 async function clearRememberedKey(){try{const db=await rememberDb();await new Promise((resolve,reject)=>{const request=db.transaction("sessions","readwrite").objectStore("sessions").delete("private-key");request.onsuccess=resolve;request.onerror=()=>reject(request.error)});db.close()}catch{}}
 async function unlock(){
- const remembered=await getRememberedKey();if(remembered){privateKey=remembered;return}
- const data=await api("/api/keys/self",{method:"GET"});$("key-modal").hidden=false;
+ const remembered=await getRememberedKey();
+ if(remembered){privateKey=remembered;return}
+ const getBundle=()=>api("/api/keys/self",{method:"GET"});
+ let data=await getBundle();
+ const modal=$("key-modal"),form=$("key-form"),field=$("key-passphrase"),button=form.querySelector('[type="submit"]'),errorBox=$("key-error");
+ modal.hidden=false;
  $("key-title").textContent=data.key_bundle?"Unlock encrypted messages":"Set up encrypted messages";
- $("key-description").textContent=data.key_bundle?"Enter the recovery passphrase you used in TC Chat. It unlocks your existing conversations.":"Create a recovery passphrase with at least 12 characters. It protects your private encryption key and is never sent to Social.";
- $("key-passphrase").autocomplete=data.key_bundle?"current-password":"new-password";
- return new Promise((resolve,reject)=>{$("key-form").onsubmit=async e=>{e.preventDefault();$("key-error").textContent="";const pass=$("key-passphrase").value;try{if(pass.length<12)throw new Error("Use at least 12 characters.");if(data.key_bundle){privateKey=await unlockPrivateKey(data.key_bundle,pass)}else{const bundle=await createKeyBundle(pass);await api("/api/keys/self",{method:"POST",body:JSON.stringify(bundle)});privateKey=await unlockPrivateKey(bundle,pass)}if($("remember-encryption").checked)await rememberKey(privateKey);else await clearRememberedKey();$("key-modal").hidden=true;$("key-passphrase").value="";resolve()}catch(error){$("key-error").textContent=error.message}}});
+ $("key-description").textContent=data.key_bundle?"Enter the recovery passphrase you already use in TC Chat. Your passphrase stays on this device.":"Create a recovery passphrase with at least 12 characters. Keep it safe: it protects access to your encrypted messages.";
+ field.autocomplete=data.key_bundle?"current-password":"new-password";
+ field.placeholder=data.key_bundle?"Your existing TC Chat recovery passphrase":"Create a recovery passphrase";
+ return new Promise((resolve,reject)=>{
+  form.onsubmit=async event=>{
+   event.preventDefault();
+   if(button.disabled)return;
+   errorBox.textContent="";
+   const pass=field.value;
+   if(pass.length<12){errorBox.textContent="Use at least 12 characters.";field.focus();return}
+   button.disabled=true;
+   button.textContent=data.key_bundle?"Unlocking…":"Setting up…";
+   try{
+    if(data.key_bundle){
+     privateKey=await unlockPrivateKey(data.key_bundle,pass);
+    }else{
+     const bundle=await createKeyBundle(pass);
+     try{
+      await api("/api/keys/self",{method:"POST",body:JSON.stringify(bundle)});
+      privateKey=await unlockPrivateKey(bundle,pass);
+     }catch(saveError){
+      if(saveError.code!=="key_bundle_exists"&&saveError.status!==409)throw saveError;
+      data=await getBundle();
+      if(!data.key_bundle)throw saveError;
+      $("key-title").textContent="Unlock encrypted messages";
+      $("key-description").textContent="An encryption key already exists for this account. Enter the recovery passphrase you originally created in TC Chat.";
+      field.placeholder="Your existing TC Chat recovery passphrase";
+      field.autocomplete="current-password";
+      privateKey=await unlockPrivateKey(data.key_bundle,pass);
+     }
+    }
+    if($("remember-encryption").checked)await rememberKey(privateKey);else await clearRememberedKey();
+    modal.hidden=true;
+    field.value="";
+    resolve();
+   }catch(failure){
+    privateKey=null;
+    errorBox.textContent=failure.message||"The recovery key could not be unlocked. Check the passphrase and try again.";
+    field.focus();
+   }finally{
+    button.disabled=false;
+    button.textContent="Unlock messages";
+   }
+  };
+ });
 }
 function conversationName(c){const other=(c.participants||[]).find(p=>String(p.id)!==String(user.id));return c.type==="group"?(c.title||"Group conversation"):(other?.username?"@"+other.username:"Conversation")}
 async function migrateLegacyHistory(cid,people){const keyData=await api("/api/keys?user_ids="+encodeURIComponent(people.map(p=>p.id).join(",")));if(keyData.keys.length!==people.length)return;let before="",beforeId="";for(;;){const query=before?"&before="+encodeURIComponent(before)+"&before_id="+encodeURIComponent(beforeId):"";const pageData=await api("/api/conversations/"+cid+"/messages?limit=80"+query);const page=pageData.messages||[];for(const message of page){if(message.encrypted_payload||typeof message.body!=="string"||!message.body)continue;const payload=await encryptMessage(message.body,cid,keyData.keys);await api("/api/conversations/"+cid+"/messages/"+message.id+"/encrypt",{method:"POST",body:JSON.stringify({encrypted_payload:payload})})}if(page.length<80)break;before=page[0].created_at;beforeId=page[0].id}}
