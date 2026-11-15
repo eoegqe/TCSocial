@@ -270,3 +270,12 @@ h1,h2,h3,p{margin-top:0}
  .profile-top .profile-identity>.avatar{width:76px;height:76px;flex-basis:76px}
  .profile-top .profile-edit-button,.profile-top>[data-follow],.profile-top>[data-verify-type]{margin:0}
 }
+
+
+.profile-card-no-banner{padding-top:25px;overflow:visible}
+.profile-card-no-banner .profile-top{margin-top:0}
+.profile-card-no-banner .profile-identity>.avatar{position:relative;top:-41px;margin-bottom:-41px;box-shadow:0 0 0 1px var(--line)}
+@media(max-width:760px){
+ .profile-card-no-banner .profile-top{margin-top:0}
+ .profile-card-no-banner .profile-identity>.avatar{top:-38px;margin-bottom:-38px}
+}
